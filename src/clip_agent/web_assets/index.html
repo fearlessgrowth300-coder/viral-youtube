@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Clipper Agent">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/assets/icon.svg">
+    <title>Clipper Agent</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">AI Video Clipper</p>
+          <h1>Clip operations</h1>
+        </div>
+        <div class="top-actions">
+          <button class="secondary install-button" type="button" id="installAppButton">Install app</button>
+          <div class="status-row" id="statusRow"></div>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <form class="control-panel" id="runForm">
+          <div class="panel-title">
+            <h2>New run</h2>
+            <button class="icon-button" type="button" id="sampleButton" title="Use sample source">
+              <span aria-hidden="true">▶</span>
+            </button>
+          </div>
+
+          <label>
+            <span>Source URL or file path</span>
+            <input id="sourceInput" name="source" placeholder="C:\path\video.mp4 or authorized stream URL">
+          </label>
+
+          <section class="source-analysis" id="sourceAnalysis" hidden>
+            <img id="sourceThumb" alt="">
+            <div>
+              <strong id="sourceTitle"></strong>
+              <p id="sourceMeta"></p>
+            </div>
+          </section>
+
+          <label>
+            <span>Transcript path</span>
+            <input id="transcriptInput" name="transcript" placeholder="Optional .srt or .vtt file">
+          </label>
+
+          <div class="grid-two">
+            <label>
+              <span>Top clips</span>
+              <input id="clipsInput" type="number" min="1" max="10" value="10">
+            </label>
+            <label>
+              <span>Length</span>
+              <input id="lengthInput" type="number" min="5" max="180" value="45">
+            </label>
+          </div>
+
+          <div class="grid-two">
+            <label>
+              <span>Live capture min</span>
+              <input id="liveCaptureInput" type="number" min="1" max="30" value="5">
+            </label>
+            <label>
+              <span>Clip quality</span>
+              <select id="qualityInput">
+                <option value="4k">4K sharper</option>
+                <option value="2k" selected>2K balanced</option>
+                <option value="hd">HD fast</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="grid-two">
+            <label>
+              <span>Clip model</span>
+              <select id="clipModelInput">
+                <option value="viral" selected>Viral</option>
+                <option value="basic">Basic</option>
+              </select>
+            </label>
+            <label>
+              <span>Genre</span>
+              <select id="genreInput">
+                <option value="auto" selected>Auto</option>
+                <option value="funny">Funny</option>
+                <option value="business">Business</option>
+                <option value="sports">Sports</option>
+                <option value="feel-good">Feel good</option>
+              </select>
+            </label>
+          </div>
+
+          <fieldset class="caption-presets">
+            <legend>Caption preset</legend>
+            <div class="preset-grid">
+              <label class="preset-card none">
+                <input type="radio" name="captionStyle" value="none">
+                <span class="preset-preview">No caption</span>
+                <strong>No caption</strong>
+              </label>
+              <label class="preset-card clean">
+                <input type="radio" name="captionStyle" value="clean">
+                <span class="preset-preview">TO GET</span>
+                <strong>Clean</strong>
+              </label>
+              <label class="preset-card karaoke">
+                <input type="radio" name="captionStyle" value="karaoke" checked>
+                <span class="preset-preview">TO GET STARTED</span>
+                <strong>Karaoke</strong>
+              </label>
+              <label class="preset-card mozi">
+                <input type="radio" name="captionStyle" value="mozi">
+                <span class="preset-preview">TO GET STARTED</span>
+                <strong>Mozi</strong>
+              </label>
+              <label class="preset-card popline">
+                <input type="radio" name="captionStyle" value="popline">
+                <span class="preset-preview">TO GET</span>
+                <strong>Popline</strong>
+              </label>
+              <label class="preset-card yellow">
+                <input type="radio" name="captionStyle" value="yellow">
+                <span class="preset-preview">TO GET STARTED</span>
+                <strong>Yellow</strong>
+              </label>
+              <label class="preset-card white-box">
+                <input type="radio" name="captionStyle" value="white-box">
+                <span class="preset-preview">To get started</span>
+                <strong>White box</strong>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="switch-row">
+            <label class="switch">
+              <input id="autoHookInput" type="checkbox" checked>
+              <span>Auto hook</span>
+            </label>
+            <label class="switch">
+              <input id="voiceoverInput" type="checkbox">
+              <span>Voiceover</span>
+            </label>
+            <label class="switch">
+              <input id="horizontalInput" type="checkbox">
+              <span>Horizontal</span>
+            </label>
+            <label class="switch">
+              <input id="youtubeAllowInput" type="checkbox">
+              <span>I own/have permission</span>
+            </label>
+          </div>
+
+          <fieldset>
+            <legend>Queue platforms</legend>
+            <div class="platforms">
+              <label><input type="checkbox" value="youtube" checked> YouTube</label>
+              <label><input type="checkbox" value="tiktok" checked> TikTok</label>
+              <label><input type="checkbox" value="instagram"> Instagram</label>
+            </div>
+          </fieldset>
+
+          <button class="primary" type="submit" id="startButton">
+            <span aria-hidden="true">▶</span>
+            Start clipping
+          </button>
+        </form>
+
+        <section class="preview-panel">
+          <div class="panel-title">
+            <h2>Preview</h2>
+            <button class="icon-button" type="button" id="refreshButton" title="Refresh">
+              <span aria-hidden="true">↻</span>
+            </button>
+          </div>
+          <div class="video-frame" id="previewFrame">
+            <video id="previewVideo" controls muted playsinline preload="metadata"></video>
+          </div>
+          <div class="preview-meta">
+            <p id="previewTitle">No rendered clips yet</p>
+            <a id="previewLink" href="#" target="_blank" rel="noreferrer">Open file</a>
+          </div>
+        </section>
+      </section>
+
+      <section class="jobs-band">
+        <div class="section-head">
+          <h2>Active jobs</h2>
+          <span id="jobCount">0</span>
+        </div>
+        <div class="jobs-list" id="jobsList"></div>
+      </section>
+
+      <section class="publish-band">
+        <div class="section-head">
+          <h2>Publishing setup</h2>
+          <span id="publishState">locked</span>
+        </div>
+        <div class="publish-setup" id="publishSetup"></div>
+      </section>
+
+      <section class="clips-band">
+        <div class="section-head">
+          <h2>Rendered clips</h2>
+          <span id="runCount">0</span>
+        </div>
+        <div class="runs-list" id="runsList"></div>
+      </section>
+    </main>
+
+    <template id="jobTemplate">
+      <article class="job-item">
+        <div>
+          <strong data-field="message"></strong>
+          <p data-field="source"></p>
+          <div class="progress-track">
+            <span data-field="bar"></span>
+          </div>
+          <small data-field="progress-label"></small>
+        </div>
+        <div class="job-actions">
+          <span data-field="status" class="pill"></span>
+          <button class="secondary" type="button" data-action="cancel-job">Stop</button>
+          <button class="danger" type="button" data-action="delete-job">Delete</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="runTemplate">
+      <article class="run-item">
+        <div class="run-header">
+          <div>
+            <h3 data-field="run"></h3>
+            <p data-field="source"></p>
+          </div>
+          <div class="run-actions">
+            <button class="secondary" type="button" data-action="publish">Publish queue</button>
+            <button class="danger" type="button" data-action="delete-run">Delete run</button>
+          </div>
+        </div>
+        <div class="skipped-list" data-field="skipped"></div>
+        <div class="clip-grid" data-field="clips"></div>
+      </article>
+    </template>
+
+    <template id="clipTemplate">
+      <article class="clip-card">
+        <video controls muted playsinline preload="metadata"></video>
+        <div>
+          <h4></h4>
+          <p></p>
+          <p class="clip-tags"></p>
+          <div class="clip-actions">
+            <a target="_blank" rel="noreferrer">Open clip</a>
+            <a target="_blank" rel="noreferrer" data-field="download">Download</a>
+            <a target="_blank" rel="noreferrer" data-field="metadata">Metadata</a>
+            <button class="secondary compact" type="button" data-action="manual-upload">Manual upload</button>
+            <button class="text-danger" type="button" data-action="delete-clip">Delete clip</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <div class="modal-backdrop" id="manualUploadModal" hidden>
+      <section class="manual-upload-modal" role="dialog" aria-modal="true" aria-labelledby="manualUploadTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">YouTube manual upload</p>
+            <h2 id="manualUploadTitle">Ready-to-copy clip details</h2>
+          </div>
+          <button class="icon-button" type="button" id="manualUploadClose" aria-label="Close">×</button>
+        </div>
+
+        <div class="upload-field">
+          <label for="manualUploadFile">Clip file path</label>
+          <div class="copy-row">
+            <input id="manualUploadFile" readonly>
+            <button class="secondary" type="button" data-copy-target="manualUploadFile">Copy</button>
+          </div>
+        </div>
+
+        <div class="upload-field">
+          <label for="manualUploadTitleField">Title</label>
+          <div class="copy-row">
+            <input id="manualUploadTitleField" readonly>
+            <button class="secondary" type="button" data-copy-target="manualUploadTitleField">Copy</button>
+          </div>
+        </div>
+
+        <div class="upload-field">
+          <label for="manualUploadDescription">Description</label>
+          <div class="copy-row tall">
+            <textarea id="manualUploadDescription" rows="7" readonly></textarea>
+            <button class="secondary" type="button" data-copy-target="manualUploadDescription">Copy</button>
+          </div>
+        </div>
+
+        <div class="upload-field">
+          <label for="manualUploadTags">Tags</label>
+          <div class="copy-row">
+            <input id="manualUploadTags" readonly>
+            <button class="secondary" type="button" data-copy-target="manualUploadTags">Copy</button>
+          </div>
+        </div>
+
+        <div class="manual-actions">
+          <a class="secondary" id="manualUploadOpenClip" target="_blank" rel="noreferrer">Open clip</a>
+          <a class="secondary" id="manualUploadDownload" target="_blank" rel="noreferrer" download>Download clip</a>
+          <a class="primary" href="https://studio.youtube.com" target="_blank" rel="noreferrer">Open YouTube Studio</a>
+        </div>
+      </section>
+    </div>
+
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

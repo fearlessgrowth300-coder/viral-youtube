@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-video-clipper-agent"
+version = "0.1.0"
+description = "Agent pipeline for finding, captioning, rendering, and queuing short clips from authorized long-form video sources."
+requires-python = ">=3.11"
+dependencies = [
+  "imageio-ffmpeg>=0.5.1",
+  "requests>=2.32.0"
+]
+
+[project.optional-dependencies]
+ai = [
+  "openai>=1.99.0"
+]
+publish = [
+  "google-api-python-client>=2.170.0",
+  "google-auth-oauthlib>=1.2.0",
+  "google-auth-httplib2>=0.2.0"
+]
+youtube-download = [
+  "yt-dlp>=2025.12.0"
+]
+dev = [
+  "pytest>=8.4.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+clip_agent = ["web_assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,193 @@
+import json
+import shutil
+import uuid
+from pathlib import Path
+
+from clip_agent.config import AgentConfig
+from clip_agent.web import (
+    ASSETS_DIR,
+    JobState,
+    PROJECT_ROOT,
+    WebState,
+    content_type_for_path,
+    delete_clip,
+    delete_run,
+    media_url,
+    publish_setup,
+    resolve_project_path,
+    sanitize_platforms,
+    start_run_job,
+)
+
+
+def test_resolve_project_path_allows_project_files() -> None:
+    resolved = resolve_project_path("samples/sample.srt")
+    assert resolved == (PROJECT_ROOT / "samples" / "sample.srt").resolve()
+
+
+def test_resolve_project_path_blocks_outside_files() -> None:
+    try:
+        resolve_project_path(str(Path("C:/Windows/System32/drivers/etc/hosts")))
+    except PermissionError:
+        return
+    raise AssertionError("expected PermissionError")
+
+
+def test_sanitize_platforms() -> None:
+    assert sanitize_platforms(["youtube", "bad", "tiktok"]) == ("youtube", "tiktok")
+
+
+def test_media_url_uses_media_route() -> None:
+    assert media_url(PROJECT_ROOT / "samples" / "sample.mp4").startswith("/media?path=")
+
+
+def test_pwa_assets_exist_with_manifest_content_type() -> None:
+    assert (ASSETS_DIR / "manifest.webmanifest").exists()
+    assert (ASSETS_DIR / "service-worker.js").exists()
+    assert (ASSETS_DIR / "icon.svg").exists()
+    assert content_type_for_path(ASSETS_DIR / "manifest.webmanifest") == "application/manifest+json"
+
+
+def minimal_config() -> AgentConfig:
+    return AgentConfig(
+        openai_api_key=None,
+        openai_analysis_model="gpt-5-mini",
+        openai_transcribe_model="gpt-4o-mini-transcribe",
+        openai_tts_model="gpt-4o-mini-tts",
+        openai_tts_voice="cedar",
+        allow_youtube_download=False,
+        publish_enabled=False,
+        require_manual_review=True,
+        background_audio_path=None,
+        background_volume=0.12,
+        default_clip_length_seconds=45,
+        youtube_client_secrets=None,
+        youtube_token_file=PROJECT_ROOT / ".secrets" / "youtube.json",
+        youtube_privacy_status="private",
+        youtube_category_id="24",
+        tiktok_access_token=None,
+        tiktok_privacy_level="SELF_ONLY",
+        instagram_access_token=None,
+        instagram_user_id=None,
+        instagram_api_version="v23.0",
+        public_media_base_url=None,
+    )
+
+
+def test_start_run_rejects_youtube_without_permission() -> None:
+    try:
+        start_run_job(
+            {
+                "source": "https://youtu.be/kApsw7gsALs?si=M6TAGwcY6T5-RyHm",
+                "clips": 1,
+                "clip_length": 10,
+            },
+            WebState(minimal_config()),
+        )
+    except ValueError as exc:
+        assert "I own/have permission" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_start_run_rejects_unavailable_youtube_before_creating_job(monkeypatch) -> None:
+    def fake_analyze_source(source: str) -> dict:
+        return {"analysis_error": "ERROR: [youtube] abc: This video is not available"}
+
+    monkeypatch.setattr("clip_agent.web.analyze_source", fake_analyze_source)
+    state = WebState(minimal_config())
+    try:
+        start_run_job(
+            {
+                "source": "https://www.youtube.com/live/18leU88yGEU?si=x",
+                "allow_youtube_download": True,
+                "clips": 1,
+                "clip_length": 10,
+            },
+            state,
+        )
+    except ValueError as exc:
+        assert "unavailable" in str(exc)
+        assert state.list_jobs() == []
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_cancel_job_marks_running_job_as_cancelling() -> None:
+    state = WebState(minimal_config())
+    state.put_job(JobState(id="job-1", source="sample.mp4", status="running", message="Rendering"))
+    job = state.request_cancel("job-1")
+    assert job is not None
+    assert job["status"] == "cancelling"
+    assert job["cancel_requested"] is True
+    assert state.should_cancel("job-1") is True
+
+
+def test_delete_job_hides_job_and_requests_cancel() -> None:
+    state = WebState(minimal_config())
+    state.put_job(JobState(id="job-2", source="sample.mp4", status="running", message="Rendering"))
+    result = state.delete_job("job-2")
+    assert result == {"deleted": True, "job_id": "job-2"}
+    assert state.list_jobs() == []
+    assert state.should_cancel("job-2") is True
+    assert state.update_job("job-2", status="failed") is False
+
+
+def test_delete_clip_updates_manifest_and_queue() -> None:
+    run_dir = PROJECT_ROOT / "runs" / f"pytest-delete-{uuid.uuid4().hex}"
+    clips_dir = run_dir / "clips"
+    clips_dir.mkdir(parents=True)
+    video = clips_dir / "000001-test.mp4"
+    srt = clips_dir / "000001-test.srt"
+    metadata = clips_dir / "000001-test.json"
+    voiceover = clips_dir / "000001-test-voiceover.wav"
+    for path in (video, srt, metadata, voiceover):
+        path.write_text("x", encoding="utf-8")
+    manifest = {
+        "run_dir": str(run_dir),
+        "source": "sample",
+        "clips": [
+            {
+                "video_path": str(video),
+                "srt_path": str(srt),
+                "metadata_path": str(metadata),
+                "candidate": {"title": "Test"},
+            }
+        ],
+        "skipped": [],
+    }
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (run_dir / "publish_queue.jsonl").write_text(
+        json.dumps({"platform": "youtube", "video_path": str(video), "status": "ready_for_review"}) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        result = delete_clip(str(video), str(run_dir))
+        assert result["deleted"] == "clip"
+        assert not video.exists()
+        assert not srt.exists()
+        assert not metadata.exists()
+        assert not voiceover.exists()
+        updated = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert updated["clips"] == []
+        assert not (run_dir / "publish_queue.jsonl").exists()
+    finally:
+        if run_dir.exists():
+            shutil.rmtree(run_dir)
+
+
+def test_delete_run_removes_run_directory() -> None:
+    run_dir = PROJECT_ROOT / "runs" / f"pytest-delete-{uuid.uuid4().hex}"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text('{"clips": []}', encoding="utf-8")
+    delete_run(str(run_dir))
+    assert not run_dir.exists()
+
+
+def test_publish_setup_reports_disabled_publish() -> None:
+    setup = publish_setup(minimal_config())
+    assert setup["enabled"] is False
+    assert setup["youtube"]["ready"] is False
+    assert "PUBLISH_ENABLED=true" in setup["youtube"]["message"]
+    assert setup["tiktok"]["ready"] is False
+    assert "PUBLISH_ENABLED=true" in setup["tiktok"]["message"]

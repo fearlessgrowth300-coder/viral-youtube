@@ -1,0 +1,11 @@
+1
+00:00:00,000 --> 00:00:03,500
+Welcome to the live stream.
+
+2
+00:00:03,500 --> 00:00:07,500
+Wait, this is a crazy funny moment!
+
+3
+00:00:07,500 --> 00:00:11,500
+That was the best moment of the whole video.
