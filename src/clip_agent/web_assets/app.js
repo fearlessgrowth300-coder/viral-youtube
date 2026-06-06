@@ -86,7 +86,7 @@ function selectedPlatforms() {
 }
 
 function selectedCaptionStyle() {
-  return document.querySelector('input[name="captionStyle"]:checked')?.value || "karaoke";
+  return document.querySelector('input[name="captionStyle"]:checked')?.value || "bold";
 }
 
 function selectedGenerationMode() {
@@ -236,7 +236,8 @@ function manualUploadMetadata(clip) {
     tags: tags.join(", "),
     pinnedComment: cleanDisplayText(
       candidate.engagement_question || "Would you have reacted the same way?"
-    )
+    ),
+    seoScore: Number(candidate.seo_score || 0)
   };
 }
 
@@ -395,6 +396,7 @@ async function analyzeSource(sourceValue, requestId) {
 function renderStatus(status) {
   statusRow.replaceChildren(
     pill(status.openai_configured ? "OpenAI ready" : "OpenAI off", status.openai_configured ? "ok" : "warn"),
+    pill(status.local_voice_ready ? "Local voice ready" : "Local voice fallback", status.local_voice_ready ? "ok" : "warn"),
     pill(
       status.transcript_api_configured ? "TranscriptAPI ready" : "TranscriptAPI off",
       status.transcript_api_configured ? "ok" : "warn"
@@ -545,7 +547,16 @@ function renderRuns(runs) {
       const metadata = clipNode.querySelector('[data-field="metadata"]');
       metadata.href = clip.metadata_url || clip.video_url;
       const tags = clip.candidate?.tags || [];
-      clipNode.querySelector(".clip-tags").textContent = tags.length ? tags.map((tag) => `#${tag}`).join(" ") : "";
+      const enhancementLabels = [
+        clip.candidate?.seo_score ? `SEO ${clip.candidate.seo_score}/100` : "",
+        clip.broll_applied ? "B-roll" : "",
+        clip.polished ? "Polished" : "",
+        clip.voiceover_provider || ""
+      ].filter(Boolean);
+      clipNode.querySelector(".clip-tags").textContent = [
+        tags.length ? tags.map((tag) => `#${tag}`).join(" ") : "",
+        enhancementLabels.join(" | ")
+      ].filter(Boolean).join("\n");
       clipNode
         .querySelector('[data-action="manual-upload"]')
         .addEventListener("click", () => openManualUpload(clip));
@@ -626,6 +637,11 @@ async function startRun(useSample = false) {
       auto_hook: document.querySelector("#autoHookInput").checked,
       interaction_prompt: document.querySelector("#interactionInput").checked,
       voiceover: document.querySelector("#voiceoverInput").checked,
+      voice_provider: document.querySelector("#voiceProviderInput").value,
+      narration_style: document.querySelector("#narrationStyleInput").value,
+      enable_broll: document.querySelector("#brollInput").checked,
+      polish: document.querySelector("#polishInput").checked,
+      seo_optimize: document.querySelector("#seoInput").checked,
       horizontal: document.querySelector("#horizontalInput").checked,
       allow_youtube_download: youtubeAllowInput.checked,
       platforms: selectedPlatforms()

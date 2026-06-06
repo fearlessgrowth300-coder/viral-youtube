@@ -63,9 +63,10 @@ def test_engagement_question_appears_near_clip_end() -> None:
     assert "between(t,37.00,45.00)" in rendered
 
 
-def test_caption_style_can_disable_subtitles() -> None:
+def test_caption_style_none_falls_back_to_bold_subtitles() -> None:
     rendered = video_filter(Path("clip.srt"), True, candidate(), True, caption_style="none")
-    assert "subtitles=" not in rendered
+    assert "subtitles=" in rendered
+    assert "Bold=1" in rendered
     assert "drawtext=" in rendered
 
 
@@ -89,6 +90,28 @@ def test_4k_quality_uses_large_lanczos_scaled_filter() -> None:
     assert "flags=lanczos" in rendered
     assert "unsharp=" in rendered
     assert "fontsize=100" in rendered
+
+
+def test_broll_and_polish_are_applied_to_render_graph() -> None:
+    rendered = video_filter(
+        Path("clip.srt"),
+        True,
+        ClipCandidate(
+            start=0,
+            end=45,
+            title="Reaction",
+            reason="test",
+            score=1,
+        ),
+        True,
+        caption_style="bold",
+        enable_broll=True,
+        polish=True,
+    )
+    assert "[cutaway]" in rendered
+    assert "overlay=0:0:enable=" in rendered
+    assert "eq=contrast=1.04" in rendered
+    assert "hqdn3d=" in rendered
 
 
 def test_render_quality_settings() -> None:

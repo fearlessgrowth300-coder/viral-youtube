@@ -256,6 +256,10 @@ select:focus {
   font-size: 12px;
 }
 
+.clip-tags {
+  white-space: pre-line;
+}
+
 .source-viral-analysis {
   margin-top: 12px;
   padding-top: 12px;
@@ -486,10 +490,10 @@ legend {
   text-shadow: 0 2px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 -1px 0 #000;
 }
 
-.preset-card.none .preset-preview {
-  color: #cfd4d1;
-  text-shadow: none;
-  font-weight: 800;
+.preset-card.bold .preset-preview {
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 950;
 }
 
 .preset-card.clean .preset-preview {

@@ -7,8 +7,9 @@ This is a local starter agent for clipping videos you own or have permission to 
 - use OpenAI to rank transcript-grounded viral moments and prepare hooks, titles, descriptions, and tags
 - transcribe with OpenAI when an API key is configured
 - score funny, surprising, high-energy, or useful moments
-- render vertical clips with burned-in captions
-- optionally add low-volume background audio and AI voiceover
+- render vertical clips with bold burned-in captions, timed cutaway B-roll, and visual polish
+- generate local movie-recap narration with Piper, with Windows and OpenAI voice fallbacks
+- score titles, descriptions, tags, and pinned questions with a TubeBuddy/vidIQ-style SEO checklist
 - write a posting review queue for YouTube, TikTok, and Instagram
 - keep working by watching a folder of incoming recordings
 
@@ -19,8 +20,9 @@ It does not bypass platform rules. YouTube URL downloads are blocked unless `ALL
 ```powershell
 cd C:\Users\UPCOMING\ai-video-clipper-agent
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[ai,publish,dev]"
+.\.venv\Scripts\python -m pip install -e ".[ai,local-voice,publish,dev]"
 Copy-Item .env.example .env
+.\.venv\Scripts\python -m piper.download_voices en_US-libritts-high --download-dir .tools\piper-voices
 ```
 
 Edit `.env` with your keys. The packaged `imageio-ffmpeg` binary is used automatically if system `ffmpeg` is not installed.
@@ -56,7 +58,9 @@ Open:
 http://127.0.0.1:8010
 ```
 
-The dashboard can start clip runs, show active jobs, preview rendered clips, and send reviewed queue entries to the configured publisher adapters.
+The dashboard can start clip runs, show active jobs, preview rendered clips, and send reviewed queue entries to the configured publisher adapters. New runs default to bold captions, source-derived cutaway B-roll, polish filters, SEO scoring, and local Piper narration.
+
+The SEO score is an in-app optimizer based on common title, keyword, description, tag, and engagement checks. It is not a direct TubeBuddy or vidIQ API integration.
 
 For YouTube URLs, check `YouTube rights` in the form only for videos or live streams you own or have permission to clip.
 
@@ -138,4 +142,5 @@ You still need official platform app setup:
 
 - Use `--transcript path\to\captions.srt` if you already have captions. This gives better moment selection and captions.
 - Background audio should be music or sound you own or have licensed.
-- If you enable AI voiceover, your post metadata includes a disclosure note.
+- Piper uses the GPL-3.0-or-later engine and the `en_US-libritts-high` LibriTTS voice data under CC BY 4.0. Attribution is written to clip metadata.
+- If you enable generated voiceover, your post metadata includes a disclosure note.

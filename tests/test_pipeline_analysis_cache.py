@@ -66,5 +66,6 @@ def test_run_reuses_exact_paste_time_openai_metadata(tmp_path: Path, monkeypatch
     candidate = result.clips[0].candidate
     assert candidate.title == "FIFA World Cup Album Confirmation"
     assert candidate.hook == "My song made the official FIFA World Cup album!"
-    assert candidate.tags == ("fifa", "worldcup", "music")
+    assert candidate.tags[:3] == ("fifa", "worldcup", "music")
+    assert candidate.seo_score > 0
     assert candidate.engagement_question == "What achievement would make you react like this?"

@@ -12,7 +12,7 @@ from .config import AgentConfig
 from .ffmpeg import escape_filter_path, ffmpeg_bin
 from .models import ClipCandidate, RenderedClip, TranscriptSegment
 from .scoring import build_hook, is_generic_hook
-from .voiceover import generate_voiceover
+from .voiceover import PIPER_ATTRIBUTION, generate_voiceover_with_provider
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 
@@ -23,31 +23,34 @@ def slugify(value: str) -> str:
 
 
 CAPTION_PRESETS = {
-    "none": "",
+    "bold": (
+        "FontName=Arial Black,FontSize=12,Bold=1,PrimaryColour=&H00FFFFFF,"
+        "OutlineColour=&H00000000,BorderStyle=1,Outline=2.2,Shadow=0,Alignment=2,MarginV=40"
+    ),
     "clean": (
-        "FontName=Arial,FontSize=8,PrimaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,BorderStyle=1,Outline=0.8,Shadow=0,Alignment=2,MarginV=34"
-    ),
-    "karaoke": (
-        "FontName=Arial,FontSize=9,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,BorderStyle=1,Outline=1.2,Shadow=0,Alignment=2,MarginV=36"
-    ),
-    "mozi": (
-        "FontName=Arial,FontSize=10,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,"
+        "FontName=Arial,FontSize=10,Bold=1,PrimaryColour=&H00FFFFFF,"
         "OutlineColour=&H00000000,BorderStyle=1,Outline=1.4,Shadow=0,Alignment=2,MarginV=38"
     ),
+    "karaoke": (
+        "FontName=Arial Black,FontSize=11,Bold=1,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,"
+        "OutlineColour=&H00000000,BorderStyle=1,Outline=1.8,Shadow=0,Alignment=2,MarginV=40"
+    ),
+    "mozi": (
+        "FontName=Arial Black,FontSize=12,Bold=1,PrimaryColour=&H0000FF00,SecondaryColour=&H00FFFFFF,"
+        "OutlineColour=&H00000000,BorderStyle=1,Outline=2.0,Shadow=0,Alignment=2,MarginV=42"
+    ),
     "popline": (
-        "FontName=Arial,FontSize=9,PrimaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,BorderStyle=1,Outline=1.2,Shadow=0,Alignment=2,MarginV=34"
+        "FontName=Arial Black,FontSize=11,Bold=1,PrimaryColour=&H00FFFFFF,"
+        "OutlineColour=&H00000000,BorderStyle=1,Outline=1.8,Shadow=0,Alignment=2,MarginV=40"
     ),
     "yellow": (
-        "FontName=Arial,FontSize=9,PrimaryColour=&H0000FFFF,"
-        "OutlineColour=&H00000000,BorderStyle=1,Outline=1.1,Shadow=0,Alignment=2,MarginV=34"
+        "FontName=Arial Black,FontSize=11,Bold=1,PrimaryColour=&H0000FFFF,"
+        "OutlineColour=&H00000000,BorderStyle=1,Outline=1.8,Shadow=0,Alignment=2,MarginV=40"
     ),
     "white-box": (
-        "FontName=Arial,FontSize=8,PrimaryColour=&H00000000,"
+        "FontName=Arial,FontSize=10,Bold=1,PrimaryColour=&H00000000,"
         "BackColour=&H00FFFFFF,OutlineColour=&H00FFFFFF,"
-        "BorderStyle=3,Outline=0.7,Shadow=0,Alignment=2,MarginV=34"
+        "BorderStyle=3,Outline=1.0,Shadow=0,Alignment=2,MarginV=40"
     ),
 }
 
@@ -250,10 +253,27 @@ def engagement_filter(
 
 
 def subtitle_filter(srt_path: Path, caption_style: str) -> str:
-    preset = CAPTION_PRESETS.get(caption_style, CAPTION_PRESETS["karaoke"])
-    if not preset:
-        return ""
+    style = caption_style if caption_style in CAPTION_PRESETS else "bold"
+    preset = CAPTION_PRESETS[style]
     return f"subtitles='{escape_filter_path(srt_path)}':force_style='{preset}'"
+
+
+def broll_enable_expression(clip_duration: float) -> str:
+    if clip_duration < 8:
+        return ""
+    windows: list[tuple[float, float]] = []
+    first_start = min(max(5.5, clip_duration * 0.24), clip_duration - 2.5)
+    windows.append((first_start, min(clip_duration, first_start + 2.8)))
+    if clip_duration >= 20:
+        second_start = min(clip_duration * 0.62, clip_duration - 2.5)
+        windows.append((second_start, min(clip_duration, second_start + 2.8)))
+    return "+".join(f"between(t,{start:.2f},{end:.2f})" for start, end in windows)
+
+
+def polish_filters(enabled: bool) -> str:
+    if not enabled:
+        return ""
+    return "eq=contrast=1.04:saturation=1.10:brightness=0.01,hqdn3d=1.0:1.0:3.0:3.0"
 
 
 def video_filter(
@@ -261,12 +281,16 @@ def video_filter(
     vertical: bool,
     candidate: ClipCandidate,
     auto_hook: bool,
-    caption_style: str = "karaoke",
+    caption_style: str = "bold",
     render_quality: str = "hd",
     interaction_prompt: bool = True,
+    enable_broll: bool = True,
+    polish: bool = True,
 ) -> str:
     settings = render_quality_settings(render_quality)
     width, height = render_dimensions(vertical, render_quality)
+    clip_duration = max(1.0, candidate.end - candidate.start)
+    broll_enable = broll_enable_expression(clip_duration) if enable_broll else ""
     overlays = [
         item
         for item in (
@@ -277,15 +301,43 @@ def video_filter(
         if item
     ]
     overlays.extend([str(settings["unsharp"]), "setsar=1", "format=yuv420p"])
+    polish_chain = polish_filters(polish)
     if vertical:
+        source_prefix = f"[0:v]{polish_chain}," if polish_chain else "[0:v]"
+        if broll_enable:
+            return (
+                f"{source_prefix}split=3[mainbg][mainfg][cutaway];"
+                f"[mainbg]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+                f"crop={width}:{height},boxblur=24:1[bg];"
+                f"[mainfg]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2[base];"
+                "[cutaway]crop=iw*0.82:ih*0.82:(iw-iw*0.82)/2:(ih-ih*0.82)/2,"
+                f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+                f"crop={width}:{height}[broll];"
+                f"[base][broll]overlay=0:0:enable='{broll_enable}'[scene];"
+                f"[scene]{','.join(overlays)}[v]"
+            )
         return (
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"{source_prefix}split=2[mainbg][mainfg];"
+            f"[mainbg]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
             f"crop={width}:{height},boxblur=24:1[bg];"
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
+            f"[mainfg]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{','.join(overlays)}[v]"
         )
+    source_prefix = f"[0:v]{polish_chain}," if polish_chain else "[0:v]"
+    if broll_enable:
+        return (
+            f"{source_prefix}split=2[main][cutaway];"
+            f"[main]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2[base];"
+            "[cutaway]crop=iw*0.82:ih*0.82:(iw-iw*0.82)/2:(ih-ih*0.82)/2,"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={width}:{height}[broll];"
+            f"[base][broll]overlay=0:0:enable='{broll_enable}'[scene];"
+            f"[scene]{','.join(overlays)}[v]"
+        )
     return (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,"
+        f"{source_prefix}scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,"
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,{','.join(overlays)}[v]"
     )
 
@@ -299,9 +351,13 @@ def render_clip(
     vertical: bool = True,
     enable_voiceover: bool = False,
     auto_hook: bool = True,
-    caption_style: str = "karaoke",
+    caption_style: str = "bold",
     render_quality: str = "hd",
     interaction_prompt: bool = True,
+    enable_broll: bool = True,
+    polish: bool = True,
+    voice_provider: str = "local-piper",
+    narration_style: str = "movie-recap",
     progress: ProgressCallback | None = None,
     progress_start: int = 0,
     progress_end: int = 100,
@@ -316,9 +372,16 @@ def render_clip(
 
     write_srt(srt_path, candidate, transcript_segments)
     has_ai_voiceover = False
+    used_voiceover_provider = ""
     generated_voiceover_path: Path | None = None
     if enable_voiceover:
-        generated = generate_voiceover(candidate, voiceover_path, config)
+        generated, used_voiceover_provider = generate_voiceover_with_provider(
+            candidate,
+            voiceover_path,
+            config,
+            provider=voice_provider,
+            narration_style=narration_style,
+        )
         has_ai_voiceover = generated is not None
         generated_voiceover_path = generated
 
@@ -354,6 +417,8 @@ def render_clip(
             caption_style,
             render_quality,
             interaction_prompt,
+            enable_broll,
+            polish,
         )
     ]
     map_audio = ["-map", "0:a?"]
@@ -416,6 +481,17 @@ def render_clip(
         "caption_style": caption_style,
         "render_quality": render_quality,
         "interaction_prompt": interaction_prompt,
+        "voiceover_provider": used_voiceover_provider,
+        "voiceover_attribution": (
+            PIPER_ATTRIBUTION if used_voiceover_provider.startswith("Piper") else ""
+        ),
+        "broll_applied": bool(enable_broll and broll_enable_expression(clip_duration)),
+        "broll_attribution": (
+            "Source-derived cutaway from the authorized input video."
+            if enable_broll and broll_enable_expression(clip_duration)
+            else ""
+        ),
+        "polished": polish,
         "disclosure": "Contains AI-generated voiceover." if has_ai_voiceover else "",
     }
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
@@ -425,4 +501,12 @@ def render_clip(
         metadata_path=metadata_path,
         candidate=candidate,
         has_ai_voiceover=has_ai_voiceover,
+        voiceover_provider=used_voiceover_provider,
+        broll_applied=bool(enable_broll and broll_enable_expression(clip_duration)),
+        broll_attribution=(
+            "Source-derived cutaway from the authorized input video."
+            if enable_broll and broll_enable_expression(clip_duration)
+            else ""
+        ),
+        polished=polish,
     )

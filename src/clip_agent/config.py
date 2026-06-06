@@ -132,6 +132,8 @@ class AgentConfig:
     public_media_base_url: str | None
     transcript_api_key: str | None = None
     transcript_api_base_url: str = "https://transcriptapi.com/api/v2"
+    piper_model_path: Path | None = None
+    piper_speaker_id: int = 0
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
@@ -157,6 +159,10 @@ class AgentConfig:
 
         background = value("BACKGROUND_AUDIO_PATH")
         youtube_secrets = value("YOUTUBE_CLIENT_SECRETS")
+        piper_model = value(
+            "PIPER_MODEL_PATH",
+            ".tools/piper-voices/en_US-libritts-high.onnx",
+        )
         return cls(
             openai_api_key=value("OPENAI_API_KEY") or None,
             openai_analysis_model=value("OPENAI_ANALYSIS_MODEL", "gpt-5-mini"),
@@ -190,4 +196,6 @@ class AgentConfig:
             transcript_api_base_url=value(
                 "TRANSCRIPT_API_BASE_URL", "https://transcriptapi.com/api/v2"
             ),
+            piper_model_path=Path(piper_model) if piper_model else None,
+            piper_speaker_id=int_value("PIPER_SPEAKER_ID", 0),
         )

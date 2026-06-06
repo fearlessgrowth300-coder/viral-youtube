@@ -655,6 +655,9 @@ def start_run_job(payload: dict[str, Any], state: WebState) -> dict[str, Any]:
         requested_seconds = safe_int(payload.get("clip_length"), 45, 5, 180)
         max_clips = safe_int(payload.get("clips"), 10, 1, 10)
         vertical = not safe_bool(payload.get("horizontal"))
+    caption_style = str(payload.get("caption_style") or "bold").strip().lower()
+    if caption_style == "none":
+        caption_style = "bold"
 
     job = JobState(id=uuid.uuid4().hex[:12], source=source)
     state.put_job(job)
@@ -665,11 +668,13 @@ def start_run_job(payload: dict[str, Any], state: WebState) -> dict[str, Any]:
         max_clips=max_clips,
         clip_length_seconds=requested_seconds,
         vertical=vertical,
-        enable_voiceover=safe_bool(payload.get("voiceover")),
+        enable_voiceover=True
+        if payload.get("voiceover") is None
+        else safe_bool(payload.get("voiceover")),
         auto_hook=True if payload.get("auto_hook") is None else safe_bool(payload.get("auto_hook")),
         clip_model=str(payload.get("clip_model") or "viral"),
         genre=str(payload.get("genre") or "auto"),
-        caption_style=str(payload.get("caption_style") or "karaoke"),
+        caption_style=caption_style,
         render_quality=str(payload.get("render_quality") or "2k").lower(),
         live_capture_seconds=max(
             safe_int(payload.get("live_capture_minutes"), 5, 1, 120) * 60,
@@ -681,6 +686,17 @@ def start_run_job(payload: dict[str, Any], state: WebState) -> dict[str, Any]:
         interaction_prompt=True
         if payload.get("interaction_prompt") is None
         else safe_bool(payload.get("interaction_prompt")),
+        enable_broll=True
+        if payload.get("enable_broll") is None
+        else safe_bool(payload.get("enable_broll")),
+        polish=True
+        if payload.get("polish") is None
+        else safe_bool(payload.get("polish")),
+        seo_optimize=True
+        if payload.get("seo_optimize") is None
+        else safe_bool(payload.get("seo_optimize")),
+        voice_provider=str(payload.get("voice_provider") or "local-piper"),
+        narration_style=str(payload.get("narration_style") or "movie-recap"),
     )
 
     run_config = state.config
@@ -809,11 +825,19 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                 write_file(self, target, send_body=send_body)
             elif path == "/api/status":
                 runs = list_runs()
+                piper_model = self.app_state.config.piper_model_path
+                if piper_model and not piper_model.is_absolute():
+                    piper_model = PROJECT_ROOT / piper_model
                 write_json(
                     self,
                     {
                         "project_root": str(PROJECT_ROOT),
                         "openai_configured": bool(self.app_state.config.openai_api_key),
+                        "local_voice_ready": bool(
+                            piper_model
+                            and piper_model.exists()
+                            and piper_model.with_suffix(piper_model.suffix + ".json").exists()
+                        ),
                         "transcript_api_configured": bool(self.app_state.config.transcript_api_key),
                         "youtube_download_allowed": self.app_state.config.allow_youtube_download,
                         "publish_enabled": self.app_state.config.publish_enabled,

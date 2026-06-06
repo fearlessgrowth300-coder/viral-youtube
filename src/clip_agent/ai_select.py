@@ -174,6 +174,12 @@ def candidate_from_analysis_item(
         )[:500],
         tags=tags,
         engagement_question=engagement_question,
+        seo_keywords=clean_ai_tags(item.get("seo_keywords") or ())[:10],
+        title_variants=tuple(
+            clean_ai_text(value)[:100]
+            for value in (item.get("title_variants") or ())
+            if clean_ai_text(value)
+        )[:4],
     )
 
 
@@ -341,7 +347,8 @@ def refine_candidates_with_openai(
         "You are a short-form video producer. Pick the strongest clips from the transcript. "
         "Favor funny, surprising, emotional, useful, or high-energy moments. "
         "Return only a JSON array. Each item must have start, end, title, reason, score, "
-        "kind, caption, hook, voiceover, description, tags, and engagement_question. "
+        "kind, caption, hook, voiceover, description, tags, engagement_question, "
+        "seo_keywords, and title_variants. "
         "Start each clip no more than 3 seconds before the strongest reaction or payoff. "
         "The hook is a bold claim or challenge shown during the first 5 seconds. "
         "It must use a specific phrase or claim from the transcript and create urgency. "
@@ -395,6 +402,8 @@ def refine_candidates_with_openai(
                     )[:320],
                     tags=tuple(item.get("tags") or build_tags(text_for_defaults, kind)),
                     engagement_question=engagement_question,
+                    seo_keywords=tuple(item.get("seo_keywords") or ())[:10],
+                    title_variants=tuple(item.get("title_variants") or ())[:4],
                 )
             )
         except (KeyError, TypeError, ValueError):

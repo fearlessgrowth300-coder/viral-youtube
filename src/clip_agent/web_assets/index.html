@@ -10,7 +10,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/assets/icon.svg">
     <title>Clipper Agent</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=5">
+    <link rel="stylesheet" href="/assets/styles.css?v=6">
   </head>
   <body>
     <main class="shell">
@@ -143,10 +143,10 @@
           <fieldset class="caption-presets">
             <legend>Caption preset</legend>
             <div class="preset-grid">
-              <label class="preset-card none">
-                <input type="radio" name="captionStyle" value="none">
-                <span class="preset-preview">No caption</span>
-                <strong>No caption</strong>
+              <label class="preset-card bold">
+                <input type="radio" name="captionStyle" value="bold" checked>
+                <span class="preset-preview">BOLD CAPTIONS</span>
+                <strong>Bold retention</strong>
               </label>
               <label class="preset-card clean">
                 <input type="radio" name="captionStyle" value="clean">
@@ -154,7 +154,7 @@
                 <strong>Clean</strong>
               </label>
               <label class="preset-card karaoke">
-                <input type="radio" name="captionStyle" value="karaoke" checked>
+                <input type="radio" name="captionStyle" value="karaoke">
                 <span class="preset-preview">TO GET STARTED</span>
                 <strong>Karaoke</strong>
               </label>
@@ -181,6 +181,25 @@
             </div>
           </fieldset>
 
+          <div class="grid-two">
+            <label>
+              <span>Voice engine</span>
+              <select id="voiceProviderInput">
+                <option value="local-piper" selected>Local neural (Piper)</option>
+                <option value="windows">Windows offline</option>
+                <option value="openai">OpenAI voice</option>
+              </select>
+            </label>
+            <label>
+              <span>Narration style</span>
+              <select id="narrationStyleInput">
+                <option value="movie-recap" selected>Movie recap</option>
+                <option value="energetic">Energetic</option>
+                <option value="natural">Natural</option>
+              </select>
+            </label>
+          </div>
+
           <div class="switch-row">
             <label class="switch">
               <input id="autoHookInput" type="checkbox" checked>
@@ -191,8 +210,20 @@
               <span>Comment question</span>
             </label>
             <label class="switch">
-              <input id="voiceoverInput" type="checkbox">
+              <input id="voiceoverInput" type="checkbox" checked>
               <span>Voiceover</span>
+            </label>
+            <label class="switch">
+              <input id="brollInput" type="checkbox" checked>
+              <span>Smart B-roll</span>
+            </label>
+            <label class="switch">
+              <input id="polishInput" type="checkbox" checked>
+              <span>Polish</span>
+            </label>
+            <label class="switch">
+              <input id="seoInput" type="checkbox" checked>
+              <span>TubeBuddy/vidIQ-style SEO</span>
             </label>
             <label class="switch">
               <input id="horizontalInput" type="checkbox">
@@ -431,6 +462,6 @@
       </section>
     </div>
 
-    <script src="/assets/app.js?v=6" defer></script>
+    <script src="/assets/app.js?v=7" defer></script>
   </body>
 </html>

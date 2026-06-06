@@ -26,6 +26,9 @@ class ClipCandidate:
     description: str = ""
     tags: tuple[str, ...] = ()
     engagement_question: str = ""
+    seo_score: int = 0
+    seo_keywords: tuple[str, ...] = ()
+    title_variants: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,10 @@ class RenderedClip:
     metadata_path: Path
     candidate: ClipCandidate
     has_ai_voiceover: bool = False
+    voiceover_provider: str = ""
+    broll_applied: bool = False
+    broll_attribution: str = ""
+    polished: bool = False
 
 
 @dataclass
@@ -55,6 +62,10 @@ class PipelineResult:
                     "metadata_path": str(clip.metadata_path),
                     "candidate": asdict(clip.candidate),
                     "has_ai_voiceover": clip.has_ai_voiceover,
+                    "voiceover_provider": clip.voiceover_provider,
+                    "broll_applied": clip.broll_applied,
+                    "broll_attribution": clip.broll_attribution,
+                    "polished": clip.polished,
                 }
                 for clip in self.clips
             ],

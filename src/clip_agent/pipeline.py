@@ -22,6 +22,7 @@ from .models import ClipCandidate, PipelineResult
 from .publishers.dispatcher import append_publish_queue
 from .render import render_clip
 from .scoring import select_candidates
+from .seo import optimize_candidate
 from .source import prepare_source
 from .transcribe import get_transcript
 
@@ -41,13 +42,18 @@ class RunOptions:
     auto_hook: bool = True
     clip_model: str = "viral"
     genre: str = "auto"
-    caption_style: str = "karaoke"
+    caption_style: str = "bold"
     render_quality: str = "2k"
     live_capture_seconds: int = 300
     platforms: tuple[str, ...] = ()
     max_transcribe_seconds: int | None = None
     generation_mode: str = "short"
     interaction_prompt: bool = True
+    enable_broll: bool = True
+    polish: bool = True
+    seo_optimize: bool = True
+    voice_provider: str = "local-piper"
+    narration_style: str = "movie-recap"
 
 
 def source_slug(source: str) -> str:
@@ -200,6 +206,11 @@ def run_once(
                 duration,
             )
         ] if candidates else []
+    if options.seo_optimize:
+        candidates = [
+            optimize_candidate(candidate, options.generation_mode)
+            for candidate in candidates
+        ]
 
     clips_dir = run_dir / "clips"
     total_candidates = max(1, len(candidates))
@@ -226,6 +237,10 @@ def run_once(
                     caption_style=options.caption_style,
                     render_quality=options.render_quality,
                     interaction_prompt=options.interaction_prompt,
+                    enable_broll=options.enable_broll,
+                    polish=options.polish,
+                    voice_provider=options.voice_provider,
+                    narration_style=options.narration_style,
                     progress=progress,
                     progress_start=render_start,
                     progress_end=render_end,
@@ -248,6 +263,14 @@ def run_once(
     manifest["generation_mode"] = options.generation_mode
     manifest["viral_analysis_provider"] = viral_analysis.get("provider", "")
     manifest["viral_analysis_cached"] = bool(viral_analysis.get("cached"))
+    manifest["enhancements"] = {
+        "bold_captions": True,
+        "broll": options.enable_broll,
+        "polish": options.polish,
+        "seo_optimizer": options.seo_optimize,
+        "voice_provider": options.voice_provider if options.enable_voiceover else "",
+        "narration_style": options.narration_style if options.enable_voiceover else "",
+    }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     append_publish_queue(run_dir / "publish_queue.jsonl", result.clips, list(options.platforms))
     emit_progress(progress, "done", 100, f"Rendered {len(result.clips)} clip(s)")

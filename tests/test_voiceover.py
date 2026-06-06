@@ -44,7 +44,14 @@ def test_openai_voiceover_error_falls_back_without_raising(monkeypatch, tmp_path
             )
 
     monkeypatch.setitem(__import__("sys").modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
-    monkeypatch.setattr("clip_agent.voiceover.generate_windows_voiceover", lambda text, destination: None)
+    monkeypatch.setattr(
+        "clip_agent.voiceover.generate_piper_voiceover",
+        lambda text, destination, config, narration_style: None,
+    )
+    monkeypatch.setattr(
+        "clip_agent.voiceover.generate_windows_voiceover",
+        lambda text, destination, narration_style="movie-recap": None,
+    )
     candidate = ClipCandidate(
         start=0,
         end=5,
@@ -53,4 +60,12 @@ def test_openai_voiceover_error_falls_back_without_raising(monkeypatch, tmp_path
         score=1,
         voiceover="Say this",
     )
-    assert generate_voiceover(candidate, tmp_path / "voice.mp3", minimal_config()) is None
+    assert (
+        generate_voiceover(
+            candidate,
+            tmp_path / "voice.mp3",
+            minimal_config(),
+            provider="openai",
+        )
+        is None
+    )
