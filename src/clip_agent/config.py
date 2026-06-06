@@ -6,9 +6,11 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+from .paths import PROJECT_ROOT, SECRETS_ROOT, resolve_data_path
 
-LOCAL_SETTINGS_PATH = Path.cwd() / ".secrets" / "app_settings.json"
-SETTINGS_PIN_PATH = Path.cwd() / ".secrets" / "settings_pin.txt"
+
+LOCAL_SETTINGS_PATH = SECRETS_ROOT / "app_settings.json"
+SETTINGS_PIN_PATH = SECRETS_ROOT / "settings_pin.txt"
 SETTING_NAMES = {
     "OPENAI_API_KEY",
     "TRANSCRIPT_API_KEY",
@@ -137,7 +139,7 @@ class AgentConfig:
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
-        load_env_file(Path.cwd() / ".env")
+        load_env_file(PROJECT_ROOT / ".env")
         local = load_local_settings()
 
         def value(name: str, default: str = "") -> str:
@@ -181,8 +183,8 @@ class AgentConfig:
             background_volume=float_value("BACKGROUND_VOLUME", 0.12),
             default_clip_length_seconds=int_value("CLIP_LENGTH_SECONDS", 45),
             youtube_client_secrets=Path(youtube_secrets) if youtube_secrets else None,
-            youtube_token_file=Path(
-                value("YOUTUBE_TOKEN_FILE", ".secrets/youtube_token.json")
+            youtube_token_file=resolve_data_path(
+                Path(value("YOUTUBE_TOKEN_FILE", ".secrets/youtube_token.json"))
             ),
             youtube_privacy_status=value("YOUTUBE_PRIVACY_STATUS", "private"),
             youtube_category_id=value("YOUTUBE_CATEGORY_ID", "24"),

@@ -9,6 +9,7 @@ from typing import Any
 
 from .config import AgentConfig
 from .models import ClipCandidate, TranscriptSegment
+from .paths import CACHE_ROOT
 from .scoring import (
     build_description,
     build_engagement_question,
@@ -22,7 +23,7 @@ from .scoring import (
 from .transcribe import youtube_cache_key
 
 
-VIRAL_ANALYSIS_CACHE_ROOT = Path.cwd() / ".cache" / "viral-analysis"
+VIRAL_ANALYSIS_CACHE_ROOT = CACHE_ROOT / "viral-analysis"
 
 
 def clean_ai_text(value: Any) -> str:

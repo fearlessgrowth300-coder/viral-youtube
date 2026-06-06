@@ -13,6 +13,7 @@ import requests
 from .config import AgentConfig
 from .ffmpeg import ffmpeg_bin, probe_duration
 from .models import TranscriptSegment
+from .paths import CACHE_ROOT
 from .source import extract_youtube_id, is_youtube_live_url, is_youtube_url
 
 
@@ -40,7 +41,7 @@ class TranscriptAPICreditsExhausted(TranscriptAPIError):
     pass
 
 
-TRANSCRIPT_CACHE_ROOT = Path.cwd() / ".cache" / "transcripts"
+TRANSCRIPT_CACHE_ROOT = CACHE_ROOT / "transcripts"
 
 
 def youtube_cache_key(youtube_url: str) -> str:

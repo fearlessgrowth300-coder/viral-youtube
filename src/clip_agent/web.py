@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hmac
 import json
 import mimetypes
+import os
 import shutil
 import threading
 import time
@@ -17,6 +20,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from .ai_select import analyze_transcript_for_viral_moments
 from .config import AgentConfig, get_or_create_settings_pin, save_local_settings
 from .pipeline import RunOptions, run_once
+from .paths import CACHE_ROOT, DATA_ROOT, PROJECT_ROOT, RUNS_ROOT, ensure_data_directories
 from .publishers.dispatcher import publish_queue
 from .source import analyze_source, is_blocking_youtube_error, is_youtube_url
 from .transcribe import (
@@ -27,8 +31,6 @@ from .transcribe import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RUNS_ROOT = PROJECT_ROOT / "runs"
 ASSETS_DIR = Path(__file__).resolve().parent / "web_assets"
 ALLOWED_PLATFORMS = {"youtube", "tiktok", "instagram"}
 
@@ -60,6 +62,8 @@ class WebState:
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
         self.settings_pin = get_or_create_settings_pin()
+        self.site_username = os.getenv("APP_USERNAME", "admin").strip() or "admin"
+        self.site_password = os.getenv("APP_PASSWORD", "")
         self.jobs: dict[str, JobState] = {}
         self.cancelled_job_ids: set[str] = set()
         self.lock = threading.Lock()
@@ -125,11 +129,7 @@ def format_timestamp(value: float | None) -> str:
 
 
 def inside_project(path: Path) -> bool:
-    try:
-        path.relative_to(PROJECT_ROOT)
-        return True
-    except ValueError:
-        return False
+    return any(inside_directory(path, root) for root in (PROJECT_ROOT, DATA_ROOT))
 
 
 def inside_directory(path: Path, directory: Path) -> bool:
@@ -172,7 +172,7 @@ def analyze_source_content(source: str, config: AgentConfig) -> dict[str, Any]:
         analysis["viral_analysis"] = {"provider": "none", "moments": []}
         return analysis
 
-    analysis_dir = PROJECT_ROOT / ".cache" / "source-analysis" / youtube_cache_key(source)
+    analysis_dir = CACHE_ROOT / "source-analysis" / youtube_cache_key(source)
     analysis_dir.mkdir(parents=True, exist_ok=True)
     try:
         transcript = fetch_transcript_api(source, analysis_dir, config)
@@ -233,6 +233,28 @@ def media_url(path: str | Path) -> str:
     if not candidate.is_absolute():
         candidate = (PROJECT_ROOT / candidate).resolve()
     return f"/media?path={quote(candidate.as_posix(), safe='')}"
+
+
+def basic_auth_matches(
+    authorization: str,
+    expected_username: str,
+    expected_password: str,
+) -> bool:
+    if not expected_password:
+        return True
+    scheme, _, encoded = authorization.partition(" ")
+    if scheme.lower() != "basic" or not encoded:
+        return False
+    try:
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    username, separator, password = decoded.partition(":")
+    return bool(
+        separator
+        and hmac.compare_digest(username, expected_username)
+        and hmac.compare_digest(password, expected_password)
+    )
 
 
 def read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
@@ -567,7 +589,7 @@ def latest_clip_preview(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def list_runs() -> list[dict[str, Any]]:
-    runs_dir = PROJECT_ROOT / "runs"
+    runs_dir = RUNS_ROOT
     if not runs_dir.exists():
         return []
     manifests = sorted(
@@ -601,9 +623,9 @@ def list_runs() -> list[dict[str, Any]]:
         has_queue = bool(clips and queue_path.exists() and queue_path.stat().st_size > 0)
         runs.append(
             {
-                "id": str(run_dir.relative_to(PROJECT_ROOT)),
+                "id": str(run_dir.relative_to(DATA_ROOT)),
                 "run_dir": str(run_dir),
-                "run_dir_label": str(run_dir.relative_to(PROJECT_ROOT)),
+                "run_dir_label": str(run_dir.relative_to(DATA_ROOT)),
                 "source": manifest.get("source", ""),
                 "duration": manifest.get("duration", 0),
                 "transcript_segments": manifest.get("transcript_segments", 0),
@@ -663,7 +685,7 @@ def start_run_job(payload: dict[str, Any], state: WebState) -> dict[str, Any]:
     state.put_job(job)
     options = RunOptions(
         source=source,
-        out_dir=PROJECT_ROOT / "runs" / "web",
+        out_dir=RUNS_ROOT / "web",
         transcript_path=transcript_path,
         max_clips=max_clips,
         clip_length_seconds=requested_seconds,
@@ -802,9 +824,31 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
         self.handle_read(send_body=False)
 
+    def require_site_auth(self) -> bool:
+        if basic_auth_matches(
+            self.headers.get("Authorization", ""),
+            self.app_state.site_username,
+            self.app_state.site_password,
+        ):
+            return False
+        body = b'{"error":"Authentication required"}'
+        self.send_response(HTTPStatus.UNAUTHORIZED)
+        self.send_header("WWW-Authenticate", 'Basic realm="Viral Video Clipper"')
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+        return True
+
     def handle_read(self, send_body: bool) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == "/healthz":
+            write_json(self, {"status": "ok"})
+            return
+        if self.require_site_auth():
+            return
         try:
             if path == "/":
                 write_file(self, ASSETS_DIR / "index.html", send_body=send_body)
@@ -875,6 +919,8 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if self.require_site_auth():
+            return
         try:
             payload = read_json_body(self)
             if parsed.path == "/api/run":
@@ -914,6 +960,8 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
+        if self.require_site_auth():
+            return
         try:
             if parsed.path.startswith("/api/jobs/"):
                 job_id = parsed.path.rsplit("/", 1)[-1]
@@ -929,8 +977,9 @@ class ClipperHTTPServer(ThreadingHTTPServer):
 
 
 def run_web_server(args: argparse.Namespace | None = None) -> None:
-    host = getattr(args, "host", "127.0.0.1")
-    port = int(getattr(args, "port", 8010))
+    ensure_data_directories()
+    host = getattr(args, "host", os.getenv("HOST", "127.0.0.1"))
+    port = int(getattr(args, "port", int(os.getenv("PORT", "8010"))))
     config = AgentConfig.from_env()
     server = ClipperHTTPServer((host, port), ClipperRequestHandler)
     server.app_state = WebState(config)

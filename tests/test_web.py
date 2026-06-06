@@ -1,4 +1,5 @@
 import json
+import base64
 import shutil
 import uuid
 from dataclasses import replace
@@ -12,6 +13,7 @@ from clip_agent.web import (
     PROJECT_ROOT,
     WebState,
     analyze_source_content,
+    basic_auth_matches,
     content_type_for_path,
     delete_clip,
     delete_run,
@@ -42,6 +44,17 @@ def test_sanitize_platforms() -> None:
 
 def test_media_url_uses_media_route() -> None:
     assert media_url(PROJECT_ROOT / "samples" / "sample.mp4").startswith("/media?path=")
+
+
+def test_basic_auth_is_optional_without_password() -> None:
+    assert basic_auth_matches("", "admin", "")
+
+
+def test_basic_auth_requires_exact_credentials() -> None:
+    encoded = base64.b64encode(b"admin:strong-password").decode("ascii")
+    assert basic_auth_matches(f"Basic {encoded}", "admin", "strong-password")
+    assert not basic_auth_matches(f"Basic {encoded}", "admin", "different")
+    assert not basic_auth_matches("Bearer token", "admin", "strong-password")
 
 
 def test_pwa_assets_exist_with_manifest_content_type() -> None:

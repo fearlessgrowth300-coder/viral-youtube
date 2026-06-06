@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.cache
+.secrets
+.tools
+.tunnel
+incoming
+runs
+tests
+.env
+.env.*
+*.log
+*.tmp
+*.part
+*-github.zip

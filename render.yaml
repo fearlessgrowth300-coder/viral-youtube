@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: viral-youtube-clipper
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: CLIPPER_DATA_DIR
+        value: /data
+      - key: APP_USERNAME
+        value: admin
+      - key: APP_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TRANSCRIPT_API_KEY
+        sync: false
+      - key: ALLOW_YOUTUBE_DOWNLOAD
+        value: "false"
+      - key: PUBLISH_ENABLED
+        value: "false"
+      - key: REQUIRE_MANUAL_REVIEW
+        value: "true"
+      - key: PIPER_MODEL_PATH
+        value: /opt/piper-voices/en_US-libritts-high.onnx
+    disk:
+      name: clipper-data
+      mountPath: /data
+      sizeGB: 20

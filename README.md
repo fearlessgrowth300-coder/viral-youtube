@@ -75,6 +75,30 @@ When configured, TranscriptAPI is used as a YouTube transcript fallback before a
 
 Pasting a YouTube link starts transcript analysis before rendering. The dashboard shows the top ranked timestamps, hooks, titles, descriptions, and tags. That transcript and OpenAI analysis are cached under the ignored `.cache` directory and reused when the clipping job starts.
 
+## Production Website
+
+The repository includes a production Docker image and `render.yaml` blueprint. The deployed service:
+
+- uses the provider's permanent HTTPS URL
+- stores runs, transcript caches, and saved settings on `/data`
+- includes FFmpeg and the local Piper narration model
+- exposes `/healthz` for hosting health checks
+- protects the entire site with `APP_USERNAME` and `APP_PASSWORD`
+
+Deploy on Render:
+
+1. Push this repository to GitHub.
+2. In Render, choose `New` then `Blueprint` and connect the repository.
+3. Enter a strong `APP_PASSWORD`, plus `OPENAI_API_KEY` and `TRANSCRIPT_API_KEY`.
+4. Keep the persistent disk mounted at `/data`.
+5. After deployment, open the generated `https://...onrender.com` URL and sign in as `admin`.
+
+This video workload requires a paid web service because persistent disks are unavailable on free web services. The included blueprint uses a Starter service and a 20 GB disk. Increase CPU, memory, or disk size for long or 4K jobs.
+
+To use a domain you own, add it from the service's `Custom Domains` page, copy Render's DNS records to your domain provider, and verify the domain. Render then provisions HTTPS automatically.
+
+Do not leave `APP_PASSWORD` empty on a public deployment. Keep API keys in Render environment variables or the protected Settings page, never in Git.
+
 ## Phone Access And Install
 
 To use the app from a phone on the same Wi-Fi, run the server on all local network interfaces:

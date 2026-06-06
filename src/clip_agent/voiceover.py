@@ -8,6 +8,7 @@ from typing import Any
 
 from .config import AgentConfig
 from .models import ClipCandidate
+from .paths import PROJECT_ROOT
 
 
 _PIPER_VOICES: dict[str, Any] = {}
@@ -155,7 +156,7 @@ def resolve_piper_model(config: AgentConfig) -> Path | None:
     if not model:
         return None
     if not model.is_absolute():
-        model = Path.cwd() / model
+        model = PROJECT_ROOT / model
     return model.resolve() if model.exists() else None
 
 

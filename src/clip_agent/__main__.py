@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from dataclasses import asdict
 from pathlib import Path
@@ -47,8 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--approve", action="store_true")
 
     web = subcommands.add_parser("web", help="Start the local web dashboard.")
-    web.add_argument("--host", default="127.0.0.1")
-    web.add_argument("--port", type=int, default=8010)
+    web.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"))
+    web.add_argument("--port", type=int, default=int(os.getenv("PORT", "8010")))
 
     return parser
 
