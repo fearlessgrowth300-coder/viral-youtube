@@ -3,6 +3,8 @@
 This is a local starter agent for clipping videos you own or have permission to use. It can:
 
 - accept a local video file, direct HLS/RTMP/HTTP media URL, or an explicitly allowed YouTube URL
+- fetch and cache a YouTube transcript as soon as a link is pasted
+- use OpenAI to rank transcript-grounded viral moments and prepare hooks, titles, descriptions, and tags
 - transcribe with OpenAI when an API key is configured
 - score funny, surprising, high-energy, or useful moments
 - render vertical clips with burned-in captions
@@ -66,6 +68,8 @@ The dashboard has two generation modes:
 Use `Settings` to store TranscriptAPI, OpenAI, YouTube, TikTok, and Instagram credentials locally. Credentials are written under the ignored `.secrets` directory and are never returned to browser JavaScript.
 
 When configured, TranscriptAPI is used as a YouTube transcript fallback before audio transcription. Exhausted credits, invalid keys, and rate limits are shown as clear job errors so the key can be replaced in Settings.
+
+Pasting a YouTube link starts transcript analysis before rendering. The dashboard shows the top ranked timestamps, hooks, titles, descriptions, and tags. That transcript and OpenAI analysis are cached under the ignored `.cache` directory and reused when the clipping job starts.
 
 ## Phone Access And Install
 

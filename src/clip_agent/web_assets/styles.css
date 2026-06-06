@@ -217,10 +217,7 @@ select:focus {
 }
 
 .source-analysis {
-  display: grid;
-  grid-template-columns: 118px 1fr;
-  gap: 12px;
-  align-items: center;
+  display: block;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -229,6 +226,13 @@ select:focus {
 
 .source-analysis[hidden] {
   display: none;
+}
+
+.source-summary {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
 }
 
 .source-analysis img {
@@ -250,6 +254,86 @@ select:focus {
   margin-top: 5px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.source-viral-analysis {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.source-viral-analysis[hidden] {
+  display: none;
+}
+
+.source-analysis-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analysis-provider {
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.source-viral-analysis .analysis-summary {
+  margin-top: 5px;
+  line-height: 1.4;
+}
+
+.source-moments {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.source-moment {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.source-moment:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.source-moment-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.source-moment-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-moment-score {
+  flex: 0 0 auto;
+  color: var(--warm);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.source-moment .source-hook {
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.source-moment .source-description,
+.source-moment .source-tags {
+  line-height: 1.4;
+}
+
+.source-moment .source-tags {
+  color: var(--accent-strong);
 }
 
 .switch,
@@ -302,6 +386,8 @@ legend {
 
 .segmented-control input {
   position: absolute;
+  width: 1px;
+  min-height: 1px;
   opacity: 0;
 }
 
@@ -864,5 +950,13 @@ textarea {
 
   h1 {
     font-size: 28px;
+  }
+
+  .source-summary {
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+
+  .source-analysis img {
+    width: 92px;
   }
 }

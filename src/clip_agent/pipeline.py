@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from .ai_select import refine_candidates_with_openai
+from .ai_select import (
+    analyze_transcript_for_viral_moments,
+    candidates_from_viral_analysis,
+)
 from .config import AgentConfig
 from .ffmpeg import probe_duration
 from .media_moments import select_media_moment_candidates
@@ -140,15 +143,30 @@ def run_once(
         max_seconds=options.max_transcribe_seconds,
         source_url=options.source,
     )
+    viral_analysis: dict[str, Any] = {}
     if transcript:
-        emit_progress(progress, "select", 56, "Selecting viral transcript moments")
-        candidates = select_candidates(
+        emit_progress(progress, "select", 52, "Ranking viral transcript moments")
+        viral_analysis = analyze_transcript_for_viral_moments(
+            options.source,
             transcript,
             duration,
-            options.max_clips,
-            options.clip_length_seconds,
-            genre=options.genre,
+            config,
+            max_moments=max(10, options.max_clips),
         )
+        candidates = candidates_from_viral_analysis(viral_analysis, duration)
+        if candidates:
+            candidates = candidates[: options.max_clips]
+            provider = str(viral_analysis.get("provider") or "transcript analysis")
+            emit_progress(progress, "select", 56, f"Selected viral moments with {provider}")
+        else:
+            candidates = select_candidates(
+                transcript,
+                duration,
+                options.max_clips,
+                options.clip_length_seconds,
+                genre=options.genre,
+            )
+            emit_progress(progress, "select", 56, "Selected transcript moments")
     else:
         emit_progress(progress, "select", 50, "Scanning video/audio peaks")
         candidates = select_media_moment_candidates(
@@ -159,7 +177,6 @@ def run_once(
             genre=options.genre,
         )
         emit_progress(progress, "select", 56, "Selected high-energy moments")
-    candidates = refine_candidates_with_openai(candidates, transcript, duration, config)
     candidates = [
         clamp_candidate_length(candidate, options.clip_length_seconds, duration)
         for candidate in candidates
@@ -218,6 +235,8 @@ def run_once(
     manifest["duration"] = duration
     manifest["transcript_segments"] = len(transcript)
     manifest["generation_mode"] = options.generation_mode
+    manifest["viral_analysis_provider"] = viral_analysis.get("provider", "")
+    manifest["viral_analysis_cached"] = bool(viral_analysis.get("cached"))
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     append_publish_queue(run_dir / "publish_queue.jsonl", result.clips, list(options.platforms))
     emit_progress(progress, "done", 100, f"Rendered {len(result.clips)} clip(s)")

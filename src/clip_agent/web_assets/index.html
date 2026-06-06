@@ -10,7 +10,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/assets/icon.svg">
     <title>Clipper Agent</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=3">
+    <link rel="stylesheet" href="/assets/styles.css?v=5">
   </head>
   <body>
     <main class="shell">
@@ -43,10 +43,20 @@
           </label>
 
           <section class="source-analysis" id="sourceAnalysis" hidden>
-            <img id="sourceThumb" alt="">
-            <div>
-              <strong id="sourceTitle"></strong>
-              <p id="sourceMeta"></p>
+            <div class="source-summary">
+              <img id="sourceThumb" alt="">
+              <div>
+                <strong id="sourceTitle"></strong>
+                <p id="sourceMeta"></p>
+              </div>
+            </div>
+            <div class="source-viral-analysis" id="sourceViralAnalysis" hidden>
+              <div class="source-analysis-head">
+                <strong>Viral transcript analysis</strong>
+                <span class="analysis-provider" id="sourceAnalysisProvider"></span>
+              </div>
+              <p class="analysis-summary" id="sourceAnalysisSummary"></p>
+              <div class="source-moments" id="sourceMoments"></div>
             </div>
           </section>
 
@@ -421,6 +431,6 @@
       </section>
     </div>
 
-    <script src="/assets/app.js?v=3" defer></script>
+    <script src="/assets/app.js?v=4" defer></script>
   </body>
 </html>

@@ -24,6 +24,10 @@ const sourceAnalysis = document.querySelector("#sourceAnalysis");
 const sourceThumb = document.querySelector("#sourceThumb");
 const sourceTitle = document.querySelector("#sourceTitle");
 const sourceMeta = document.querySelector("#sourceMeta");
+const sourceViralAnalysis = document.querySelector("#sourceViralAnalysis");
+const sourceAnalysisProvider = document.querySelector("#sourceAnalysisProvider");
+const sourceAnalysisSummary = document.querySelector("#sourceAnalysisSummary");
+const sourceMoments = document.querySelector("#sourceMoments");
 const publishSetup = document.querySelector("#publishSetup");
 const publishState = document.querySelector("#publishState");
 const manualUploadModal = document.querySelector("#manualUploadModal");
@@ -53,6 +57,8 @@ const longModeFields = document.querySelector("#longModeFields");
 const longDurationInput = document.querySelector("#longDurationInput");
 const horizontalInput = document.querySelector("#horizontalInput");
 let analyzeTimer = null;
+let sourceAnalysisRequestId = 0;
+let lastCredentialAlert = "";
 let deferredInstallPrompt = null;
 
 function pill(text, tone = "") {
@@ -259,38 +265,124 @@ function isYouTubeSource(value) {
   }
 }
 
+function formatMomentTime(seconds) {
+  const value = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const remainder = value % 60;
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
+    : `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function renderSourceMoments(viralAnalysis) {
+  sourceMoments.replaceChildren();
+  const moments = Array.isArray(viralAnalysis?.moments) ? viralAnalysis.moments.slice(0, 5) : [];
+  sourceViralAnalysis.hidden = !moments.length;
+  if (!moments.length) {
+    return;
+  }
+  sourceAnalysisProvider.textContent = viralAnalysis.provider === "openai"
+    ? "OpenAI"
+    : "Local ranking";
+  sourceAnalysisSummary.textContent = viralAnalysis.summary || "Strongest transcript moments, ranked first.";
+
+  moments.forEach((moment, index) => {
+    const row = document.createElement("article");
+    row.className = "source-moment";
+
+    const head = document.createElement("div");
+    head.className = "source-moment-head";
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}. ${cleanDisplayText(moment.title || "Viral moment")}`;
+    const score = document.createElement("span");
+    score.className = "source-moment-score";
+    score.textContent = `${Math.round(Number(moment.score) || 0)} score`;
+    head.append(title, score);
+
+    const hook = document.createElement("p");
+    hook.className = "source-hook";
+    hook.textContent = cleanDisplayText(moment.hook || moment.caption || "");
+
+    const description = document.createElement("p");
+    description.className = "source-description";
+    description.textContent = [
+      `${formatMomentTime(moment.start)}-${formatMomentTime(moment.end)}`,
+      cleanDisplayText(moment.description || moment.reason || "")
+    ].filter(Boolean).join(" - ");
+
+    const tags = document.createElement("p");
+    tags.className = "source-tags";
+    tags.textContent = uniqueTags(moment.tags || []).slice(0, 7).map((tag) => `#${tag}`).join(" ");
+
+    row.append(head);
+    if (hook.textContent) {
+      row.append(hook);
+    }
+    row.append(description);
+    if (tags.textContent) {
+      row.append(tags);
+    }
+    sourceMoments.append(row);
+  });
+}
+
 function scheduleSourceAnalysis() {
   clearTimeout(analyzeTimer);
+  sourceAnalysisRequestId += 1;
   const sourceValue = sourceInput.value.trim();
   if (!sourceValue || !isYouTubeSource(sourceValue)) {
     sourceAnalysis.hidden = true;
+    sourceViralAnalysis.hidden = true;
     return;
   }
-  sourceMeta.textContent = "Analyzing link...";
+  const requestId = sourceAnalysisRequestId;
+  sourceMeta.textContent = "Fetching transcript and ranking viral moments...";
   sourceTitle.textContent = sourceValue;
   sourceThumb.removeAttribute("src");
+  sourceViralAnalysis.hidden = true;
+  sourceMoments.replaceChildren();
   sourceAnalysis.hidden = false;
-  analyzeTimer = setTimeout(() => analyzeSource(sourceValue), 600);
+  analyzeTimer = setTimeout(() => analyzeSource(sourceValue, requestId), 600);
 }
 
-async function analyzeSource(sourceValue) {
+async function analyzeSource(sourceValue, requestId) {
   try {
     const payload = await api(`/api/analyze?source=${encodeURIComponent(sourceValue)}`);
+    if (requestId !== sourceAnalysisRequestId || sourceInput.value.trim() !== sourceValue) {
+      return;
+    }
     const analysis = payload.analysis;
     sourceTitle.textContent = analysis.title || sourceValue;
-    sourceMeta.textContent = analysis.analysis_error
-      ? `YouTube metadata unavailable - ${analysis.analysis_error}`
-      : [
-          analysis.is_live ? "LIVE source" : "",
-          analysis.duration_string || "",
-          analysis.has_captions ? "captions found" : "no captions found"
-        ].filter(Boolean).join(" - ");
+    const transcriptLabels = {
+      ready: `${analysis.transcript_segments || 0} transcript segments analyzed`,
+      not_configured: "Add a TranscriptAPI key in Settings",
+      credits_exhausted: "TranscriptAPI credits exhausted",
+      error: analysis.transcript_error || "TranscriptAPI failed",
+      unavailable: "No transcript available"
+    };
+    const meta = [
+      analysis.is_live ? "LIVE source" : "",
+      analysis.duration_string || "",
+      transcriptLabels[analysis.transcript_status] || "",
+      analysis.analysis_error ? `Metadata: ${analysis.analysis_error}` : ""
+    ].filter(Boolean);
+    sourceMeta.textContent = meta.join(" - ") || "Source analyzed";
     if (analysis.thumbnail) {
       sourceThumb.src = analysis.thumbnail;
     }
+    renderSourceMoments(analysis.viral_analysis);
+    if (analysis.credential_alert && analysis.credential_alert !== lastCredentialAlert) {
+      lastCredentialAlert = analysis.credential_alert;
+      window.alert(analysis.credential_alert);
+    }
   } catch (error) {
+    if (requestId !== sourceAnalysisRequestId) {
+      return;
+    }
     sourceTitle.textContent = "Could not analyze link";
     sourceMeta.textContent = error.message;
+    sourceViralAnalysis.hidden = true;
   }
 }
 

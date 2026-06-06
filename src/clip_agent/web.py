@@ -14,10 +14,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+from .ai_select import analyze_transcript_for_viral_moments
 from .config import AgentConfig, get_or_create_settings_pin, save_local_settings
 from .pipeline import RunOptions, run_once
 from .publishers.dispatcher import publish_queue
 from .source import analyze_source, is_blocking_youtube_error, is_youtube_url
+from .transcribe import (
+    TranscriptAPICreditsExhausted,
+    TranscriptAPIError,
+    fetch_transcript_api,
+    youtube_cache_key,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -148,6 +155,65 @@ def resolve_runs_path(raw_path: str) -> Path:
     if not inside_directory(resolved, RUNS_ROOT):
         raise PermissionError(f"Path is outside generated runs: {raw_path}")
     return resolved
+
+
+def analyze_source_content(source: str, config: AgentConfig) -> dict[str, Any]:
+    analysis = analyze_source(source)
+    if not is_youtube_url(source):
+        return analysis
+
+    analysis_error = str(analysis.get("analysis_error") or "")
+    if analysis_error and is_blocking_youtube_error(analysis_error):
+        analysis["transcript_status"] = "unavailable"
+        analysis["viral_analysis"] = {"provider": "none", "moments": []}
+        return analysis
+    if not config.transcript_api_key:
+        analysis["transcript_status"] = "not_configured"
+        analysis["viral_analysis"] = {"provider": "none", "moments": []}
+        return analysis
+
+    analysis_dir = PROJECT_ROOT / ".cache" / "source-analysis" / youtube_cache_key(source)
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        transcript = fetch_transcript_api(source, analysis_dir, config)
+    except TranscriptAPICreditsExhausted as exc:
+        analysis["transcript_status"] = "credits_exhausted"
+        analysis["credential_alert"] = str(exc)
+        analysis["viral_analysis"] = {"provider": "none", "moments": []}
+        return analysis
+    except TranscriptAPIError as exc:
+        analysis["transcript_status"] = "error"
+        analysis["transcript_error"] = str(exc)
+        analysis["viral_analysis"] = {"provider": "none", "moments": []}
+        return analysis
+    except Exception as exc:
+        analysis["transcript_status"] = "error"
+        analysis["transcript_error"] = f"Transcript analysis failed: {exc}"
+        analysis["viral_analysis"] = {"provider": "none", "moments": []}
+        return analysis
+
+    if not transcript:
+        analysis["transcript_status"] = "unavailable"
+        analysis["transcript_segments"] = 0
+        analysis["viral_analysis"] = {"provider": "none", "moments": []}
+        return analysis
+
+    duration = float(analysis.get("duration") or max(segment.end for segment in transcript))
+    viral_analysis = analyze_transcript_for_viral_moments(
+        source,
+        transcript,
+        duration,
+        config,
+    )
+    analysis["duration"] = analysis.get("duration") or duration
+    analysis["has_captions"] = True
+    analysis["transcript_status"] = "ready"
+    analysis["transcript_segments"] = len(transcript)
+    analysis["transcript_preview"] = " ".join(
+        segment.text for segment in transcript[:6]
+    )[:600]
+    analysis["viral_analysis"] = viral_analysis
+    return analysis
 
 
 def find_run_dir(path: Path) -> Path:
@@ -772,7 +838,10 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                 if not source:
                     write_json(self, {"error": "Source is required."}, HTTPStatus.BAD_REQUEST)
                 else:
-                    write_json(self, {"analysis": analyze_source(source)})
+                    write_json(
+                        self,
+                        {"analysis": analyze_source_content(source, self.app_state.config)},
+                    )
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except PermissionError as exc:

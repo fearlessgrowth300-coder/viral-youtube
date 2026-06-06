@@ -71,7 +71,12 @@ def test_fetch_transcript_api_returns_timestamped_segments(tmp_path: Path, monke
         transcript_api_key="test-key",
         transcript_api_base_url="https://transcriptapi.com/api/v2",
     )
-    segments = fetch_transcript_api("https://youtu.be/abcdefghijk", tmp_path, config)
+    segments = fetch_transcript_api(
+        "https://youtu.be/abcdefghijk",
+        tmp_path,
+        config,
+        cache_root=tmp_path / "cache",
+    )
     assert segments[0].start == 4.0
     assert segments[0].end == 6.5
     assert segments[0].text == "This gets wild"
@@ -92,8 +97,52 @@ def test_fetch_transcript_api_reports_exhausted_credits(tmp_path: Path, monkeypa
         transcript_api_base_url="https://transcriptapi.com/api/v2",
     )
     try:
-        fetch_transcript_api("https://youtu.be/abcdefghijk", tmp_path, config)
+        fetch_transcript_api(
+            "https://youtu.be/abcdefghijk",
+            tmp_path,
+            config,
+            cache_root=tmp_path / "cache",
+        )
     except TranscriptAPICreditsExhausted as exc:
         assert "credits are exhausted" in str(exc)
     else:
         raise AssertionError("expected TranscriptAPICreditsExhausted")
+
+
+def test_fetch_transcript_api_reuses_global_cache(tmp_path: Path, monkeypatch) -> None:
+    calls = 0
+
+    def fake_get(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return response(
+            200,
+            {
+                "video_id": "cachevideo1",
+                "language": "en",
+                "transcript": [
+                    {"text": "The crowd went wild", "start": 12.0, "duration": 3.0},
+                ],
+            },
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    config = SimpleNamespace(
+        transcript_api_key="test-key",
+        transcript_api_base_url="https://transcriptapi.com/api/v2",
+    )
+    cache_root = tmp_path / "shared-cache"
+    first = fetch_transcript_api(
+        "https://youtu.be/cachevideo1",
+        tmp_path / "first",
+        config,
+        cache_root=cache_root,
+    )
+    second = fetch_transcript_api(
+        "https://youtu.be/cachevideo1",
+        tmp_path / "second",
+        config,
+        cache_root=cache_root,
+    )
+    assert calls == 1
+    assert second == first

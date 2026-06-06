@@ -1,14 +1,17 @@
 import json
 import shutil
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 from clip_agent.config import AgentConfig
+from clip_agent.models import TranscriptSegment
 from clip_agent.web import (
     ASSETS_DIR,
     JobState,
     PROJECT_ROOT,
     WebState,
+    analyze_source_content,
     content_type_for_path,
     delete_clip,
     delete_run,
@@ -88,6 +91,53 @@ def test_start_run_rejects_youtube_without_permission() -> None:
         assert "I own/have permission" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_analyze_source_content_fetches_transcript_and_ranks_moments(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clip_agent.web.analyze_source",
+        lambda source: {
+            "source": source,
+            "title": "Test video",
+            "is_youtube": True,
+            "duration": 120,
+            "duration_string": "2:00",
+            "analysis_error": "",
+        },
+    )
+    monkeypatch.setattr(
+        "clip_agent.web.fetch_transcript_api",
+        lambda source, run_dir, config: [
+            TranscriptSegment(40, 45, "This reaction got completely crazy"),
+        ],
+    )
+    monkeypatch.setattr(
+        "clip_agent.web.analyze_transcript_for_viral_moments",
+        lambda source, transcript, duration, config: {
+            "provider": "openai",
+            "summary": "Strongest moment",
+            "moments": [{"start": 40, "end": 45, "title": "Crazy reaction"}],
+        },
+    )
+    config = replace(minimal_config(), transcript_api_key="transcript-key")
+
+    analysis = analyze_source_content("https://youtu.be/analysis001", config)
+
+    assert analysis["transcript_status"] == "ready"
+    assert analysis["transcript_segments"] == 1
+    assert analysis["viral_analysis"]["provider"] == "openai"
+
+
+def test_analyze_source_content_reports_missing_transcript_key(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clip_agent.web.analyze_source",
+        lambda source: {"source": source, "title": "Test video", "is_youtube": True},
+    )
+    analysis = analyze_source_content(
+        "https://youtu.be/analysis002",
+        minimal_config(),
+    )
+    assert analysis["transcript_status"] == "not_configured"
 
 
 def test_start_run_rejects_unavailable_youtube_before_creating_job(monkeypatch) -> None:

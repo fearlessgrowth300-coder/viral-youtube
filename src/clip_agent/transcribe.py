@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import html
+import hashlib
 import re
 import subprocess
 import time
@@ -12,7 +13,7 @@ import requests
 from .config import AgentConfig
 from .ffmpeg import ffmpeg_bin, probe_duration
 from .models import TranscriptSegment
-from .source import is_youtube_url
+from .source import extract_youtube_id, is_youtube_live_url, is_youtube_url
 
 
 SRT_BLOCK_RE = re.compile(
@@ -37,6 +38,82 @@ class TranscriptAPIError(RuntimeError):
 
 class TranscriptAPICreditsExhausted(TranscriptAPIError):
     pass
+
+
+TRANSCRIPT_CACHE_ROOT = Path.cwd() / ".cache" / "transcripts"
+
+
+def youtube_cache_key(youtube_url: str) -> str:
+    video_id = extract_youtube_id(youtube_url)
+    if video_id:
+        return video_id
+    return hashlib.sha1(youtube_url.encode("utf-8")).hexdigest()[:20]
+
+
+def transcript_cache_path(
+    youtube_url: str,
+    cache_root: Path = TRANSCRIPT_CACHE_ROOT,
+) -> Path:
+    return cache_root / f"{youtube_cache_key(youtube_url)}.json"
+
+
+def transcript_segments_from_payload(payload: dict) -> list[TranscriptSegment]:
+    raw_segments = payload.get("transcript") or payload.get("segments") or []
+    segments: list[TranscriptSegment] = []
+    for item in raw_segments:
+        if not isinstance(item, dict):
+            continue
+        text = clean_caption_text(str(item.get("text") or ""))
+        if not text:
+            continue
+        start = float(item.get("start") or 0.0)
+        duration = float(item.get("duration") or 0.0)
+        end = float(item.get("end") or (start + max(0.2, duration)))
+        segments.append(TranscriptSegment(start=start, end=max(start + 0.2, end), text=text))
+    return segments
+
+
+def load_cached_transcript(
+    youtube_url: str,
+    cache_root: Path = TRANSCRIPT_CACHE_ROOT,
+    max_age_seconds: float | None = None,
+) -> list[TranscriptSegment]:
+    path = transcript_cache_path(youtube_url, cache_root)
+    if not path.exists():
+        return []
+    if max_age_seconds is not None and time.time() - path.stat().st_mtime > max_age_seconds:
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return transcript_segments_from_payload(payload)
+
+
+def write_transcript_cache(
+    youtube_url: str,
+    payload: dict,
+    segments: list[TranscriptSegment],
+    cache_root: Path = TRANSCRIPT_CACHE_ROOT,
+) -> Path:
+    cache_root.mkdir(parents=True, exist_ok=True)
+    path = transcript_cache_path(youtube_url, cache_root)
+    path.write_text(
+        json.dumps(
+            {
+                "source": youtube_url,
+                "video_id": payload.get("video_id") or extract_youtube_id(youtube_url),
+                "language": payload.get("language"),
+                "segments": [
+                    {"start": segment.start, "end": segment.end, "text": segment.text}
+                    for segment in segments
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def parse_srt_time(value: str) -> float:
@@ -223,9 +300,18 @@ def fetch_transcript_api(
     run_dir: Path,
     config: AgentConfig,
     retries: int = 2,
+    cache_root: Path = TRANSCRIPT_CACHE_ROOT,
 ) -> list[TranscriptSegment]:
     if not config.transcript_api_key or not is_youtube_url(youtube_url):
         return []
+    cache_max_age = 15 * 60 if is_youtube_live_url(youtube_url) else None
+    cached = load_cached_transcript(
+        youtube_url,
+        cache_root,
+        max_age_seconds=cache_max_age,
+    )
+    if cached:
+        return cached
     endpoint = f"{config.transcript_api_base_url.rstrip('/')}/youtube/transcript"
     response: requests.Response | None = None
     for attempt in range(retries + 1):
@@ -271,19 +357,10 @@ def fetch_transcript_api(
         )
 
     payload = response.json()
-    raw_segments = payload.get("transcript") or payload.get("segments") or []
-    segments: list[TranscriptSegment] = []
-    for item in raw_segments:
-        if not isinstance(item, dict):
-            continue
-        text = clean_caption_text(str(item.get("text") or ""))
-        if not text:
-            continue
-        start = float(item.get("start") or 0.0)
-        duration = float(item.get("duration") or 0.0)
-        end = float(item.get("end") or (start + max(0.2, duration)))
-        segments.append(TranscriptSegment(start=start, end=max(start + 0.2, end), text=text))
+    segments = transcript_segments_from_payload(payload)
     if segments:
+        write_transcript_cache(youtube_url, payload, segments, cache_root)
+        run_dir.mkdir(parents=True, exist_ok=True)
         cache_path = run_dir / "transcriptapi.json"
         cache_path.write_text(
             json.dumps(
