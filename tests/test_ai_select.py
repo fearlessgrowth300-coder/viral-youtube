@@ -56,3 +56,31 @@ def test_model_access_error_uses_fallback() -> None:
         RuntimeError("organization must be verified; code=model_not_found")
     )
     assert not ai_select.should_try_fallback_model(RuntimeError("rate limit reached"))
+
+
+def test_cached_analysis_requires_matching_full_media_duration() -> None:
+    payload = {"transcript_duration": 6243.0}
+    assert ai_select.cached_analysis_matches_media(payload, 6243.0)
+    assert ai_select.cached_analysis_matches_media(payload, 6200.0)
+    assert not ai_select.cached_analysis_matches_media(payload, 300.0)
+    assert not ai_select.cached_analysis_matches_media({}, 6243.0)
+
+
+def test_candidate_cleans_openai_markdown_and_tags() -> None:
+    candidate = ai_select.candidate_from_analysis_item(
+        {
+            "start": 10,
+            "end": 40,
+            "title": "**Big Reveal**",
+            "hook": "**Watch this happen!**",
+            "description": "  A   real __moment__. ",
+            "tags": ["World Cup", "#Live Reaction", "World Cup"],
+        },
+        rank=1,
+        duration=100,
+    )
+    assert candidate is not None
+    assert candidate.title == "Big Reveal"
+    assert candidate.hook == "Watch this happen!"
+    assert candidate.description == "A real moment."
+    assert candidate.tags == ("worldcup", "livereaction")

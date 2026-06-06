@@ -11,7 +11,9 @@ from urllib.parse import urlparse
 
 from .ai_select import (
     analyze_transcript_for_viral_moments,
+    cached_analysis_matches_media,
     candidates_from_viral_analysis,
+    load_cached_viral_analysis,
 )
 from .config import AgentConfig
 from .ffmpeg import probe_duration
@@ -146,13 +148,22 @@ def run_once(
     viral_analysis: dict[str, Any] = {}
     if transcript:
         emit_progress(progress, "select", 52, "Ranking viral transcript moments")
-        viral_analysis = analyze_transcript_for_viral_moments(
+        source_analysis = load_cached_viral_analysis(
             options.source,
-            transcript,
-            duration,
-            config,
-            max_moments=max(10, options.max_clips),
+            model=config.openai_analysis_model if config.openai_api_key else None,
         )
+        if source_analysis and cached_analysis_matches_media(source_analysis, duration):
+            viral_analysis = {**source_analysis, "cached": True}
+            emit_progress(progress, "select", 54, "Using the OpenAI moments shown before rendering")
+        else:
+            viral_analysis = analyze_transcript_for_viral_moments(
+                options.source,
+                transcript,
+                duration,
+                config,
+                max_moments=max(10, options.max_clips),
+                cache_result=source_analysis is None,
+            )
         candidates = candidates_from_viral_analysis(viral_analysis, duration)
         if candidates:
             candidates = candidates[: options.max_clips]

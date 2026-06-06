@@ -81,11 +81,12 @@ def test_youtube_download_options_include_ffmpeg_location(tmp_path: Path) -> Non
     assert "height<=1080" in options["format"]
 
 
-def test_youtube_live_url_uses_capture_mode_even_for_replay() -> None:
+def test_youtube_live_url_downloads_full_video_when_broadcast_ended() -> None:
     source = "https://www.youtube.com/live/7REUA9nQWIA?si=x"
     assert is_youtube_live_url(source) is True
-    assert should_capture_youtube_source(source, {"live_status": "was_live"}) is True
+    assert should_capture_youtube_source(source, {"live_status": "was_live"}) is False
     assert should_capture_youtube_source("https://www.youtube.com/watch?v=abc123", {"live_status": "was_live"}) is False
+    assert should_capture_youtube_source(source, {"live_status": "is_live"}) is True
 
 
 def test_is_live_info_only_current_live() -> None:

@@ -277,7 +277,13 @@ function formatMomentTime(seconds) {
 
 function renderSourceMoments(viralAnalysis) {
   sourceMoments.replaceChildren();
-  const moments = Array.isArray(viralAnalysis?.moments) ? viralAnalysis.moments.slice(0, 5) : [];
+  const requestedClips = Math.max(
+    1,
+    Math.min(10, Number(document.querySelector("#clipsInput")?.value || 5))
+  );
+  const moments = Array.isArray(viralAnalysis?.moments)
+    ? viralAnalysis.moments.slice(0, requestedClips)
+    : [];
   sourceViralAnalysis.hidden = !moments.length;
   if (!moments.length) {
     return;

@@ -149,7 +149,7 @@ def is_live_info(info: dict) -> bool:
 
 
 def should_capture_youtube_source(source: str, info: dict) -> bool:
-    return is_live_info(info) or is_youtube_live_url(source)
+    return is_live_info(info)
 
 
 def best_stream_url(info: dict) -> str:
@@ -502,7 +502,7 @@ def analyze_source(source: str) -> dict:
         "thumbnail": info.get("thumbnail") or "",
         "duration": info.get("duration"),
         "duration_string": info.get("duration_string") or "",
-        "is_live": is_live_info(info) or is_youtube_live_url(source),
+        "is_live": is_live_info(info),
         "live_status": info.get("live_status") or "",
         "webpage_url": info.get("webpage_url") or source,
         "has_captions": bool(subtitles or automatic),

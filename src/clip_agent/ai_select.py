@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,20 @@ from .transcribe import youtube_cache_key
 VIRAL_ANALYSIS_CACHE_ROOT = Path.cwd() / ".cache" / "viral-analysis"
 
 
+def clean_ai_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").replace("**", "").replace("__", "")).strip()
+
+
+def clean_ai_tags(value: Any) -> tuple[str, ...]:
+    tags = value if isinstance(value, (list, tuple)) else str(value or "").split(",")
+    cleaned = []
+    for tag in tags:
+        slug = re.sub(r"[^a-z0-9]+", "", str(tag).strip().lower().lstrip("#"))
+        if slug:
+            cleaned.append(slug)
+    return tuple(dict.fromkeys(cleaned))
+
+
 def extract_json_response(text: str) -> Any:
     clean = text.strip()
     if clean.startswith("```"):
@@ -37,6 +52,18 @@ def transcript_fingerprint(segments: list[TranscriptSegment]) -> str:
     for segment in segments:
         digest.update(f"{segment.start:.2f}|{segment.end:.2f}|{segment.text}\n".encode("utf-8"))
     return digest.hexdigest()
+
+
+def transcript_duration(segments: list[TranscriptSegment]) -> float:
+    return max((segment.end for segment in segments), default=0.0)
+
+
+def cached_analysis_matches_media(payload: dict[str, Any], duration: float) -> bool:
+    analyzed_duration = float(payload.get("transcript_duration") or 0.0)
+    if analyzed_duration <= 0 or duration <= 0:
+        return False
+    tolerance = max(10.0, analyzed_duration * 0.03)
+    return abs(analyzed_duration - duration) <= tolerance
 
 
 def viral_analysis_cache_path(source_url: str) -> Path:
@@ -116,38 +143,36 @@ def candidate_from_analysis_item(
     end = min(duration or end, end)
     if end <= start:
         return None
-    evidence = str(
+    evidence = clean_ai_text(
         item.get("transcript_quote")
         or item.get("reason")
         or item.get("title")
         or "Highlight"
     )
-    kind = str(item.get("kind") or classify_kind(evidence))[:40]
-    hook = str(item.get("hook") or build_hook(evidence, rank))[:86]
+    kind = clean_ai_text(item.get("kind") or classify_kind(evidence))[:40]
+    hook = clean_ai_text(item.get("hook") or build_hook(evidence, rank))[:86]
     if is_generic_hook(hook):
         hook = build_hook(evidence, rank)
-    engagement_question = str(
+    engagement_question = clean_ai_text(
         item.get("engagement_question")
         or build_engagement_question(evidence, kind)
     )[:100]
-    tags = item.get("tags") or build_tags(evidence, kind)
-    if isinstance(tags, str):
-        tags = [tag.strip().lstrip("#") for tag in tags.split(",")]
+    tags = clean_ai_tags(item.get("tags") or build_tags(evidence, kind))
     return ClipCandidate(
         start=round(start, 2),
         end=round(end, 2),
-        title=str(item.get("title") or "Viral Highlight")[:100],
-        reason=str(item.get("reason") or f"Transcript evidence: {evidence}")[:400],
+        title=clean_ai_text(item.get("title") or "Viral Highlight")[:100],
+        reason=clean_ai_text(item.get("reason") or f"Transcript evidence: {evidence}")[:400],
         score=max(0.0, min(100.0, score)),
         kind=kind,
-        caption=str(item.get("caption") or hook)[:120],
-        voiceover=str(item.get("voiceover") or build_voiceover(evidence, hook))[:220],
+        caption=clean_ai_text(item.get("caption") or hook)[:120],
+        voiceover=clean_ai_text(item.get("voiceover") or build_voiceover(evidence, hook))[:220],
         hook=hook,
-        description=str(
+        description=clean_ai_text(
             item.get("description")
             or build_description(evidence, hook, engagement_question)
         )[:500],
-        tags=tuple(str(tag).strip().lstrip("#") for tag in tags if str(tag).strip()),
+        tags=tags,
         engagement_question=engagement_question,
     )
 
@@ -181,6 +206,7 @@ def fallback_viral_analysis(
         "provider": "local-scoring",
         "model": "local-scoring",
         "transcript_fingerprint": transcript_fingerprint(segments),
+        "transcript_duration": transcript_duration(segments),
         "transcript_segments": len(segments),
         "summary": "Ranked from transcript language, urgency, surprise, emotion, and reaction signals.",
         "analysis_error": error,
@@ -200,6 +226,7 @@ def analyze_transcript_for_viral_moments(
     duration: float,
     config: AgentConfig,
     max_moments: int = 10,
+    cache_result: bool = True,
 ) -> dict[str, Any]:
     requested_model = config.openai_analysis_model if config.openai_api_key else None
     cached = load_cached_viral_analysis(source_url, segments, requested_model)
@@ -210,6 +237,7 @@ def analyze_transcript_for_viral_moments(
             "source": source_url,
             "provider": "none",
             "transcript_segments": 0,
+            "transcript_duration": 0,
             "summary": "",
             "moments": [],
         }
@@ -268,6 +296,7 @@ def analyze_transcript_for_viral_moments(
                 "model": selected_model,
                 "requested_model": config.openai_analysis_model,
                 "transcript_fingerprint": transcript_fingerprint(segments),
+                "transcript_duration": transcript_duration(segments),
                 "transcript_segments": len(segments),
                 "summary": str(parsed.get("summary") or "OpenAI ranked the strongest transcript moments."),
                 "moments": [
@@ -286,11 +315,12 @@ def analyze_transcript_for_viral_moments(
                 max_moments,
                 error=f"OpenAI fallback used: {exc}",
             )
-    VIRAL_ANALYSIS_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
-    viral_analysis_cache_path(source_url).write_text(
-        json.dumps(payload, indent=2),
-        encoding="utf-8",
-    )
+    if cache_result:
+        VIRAL_ANALYSIS_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+        viral_analysis_cache_path(source_url).write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
     return payload
 
 

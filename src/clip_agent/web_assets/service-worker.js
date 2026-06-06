@@ -1,7 +1,7 @@
-const CACHE_NAME = "clipper-agent-v3";
+const CACHE_NAME = "clipper-agent-v4";
 const APP_SHELL = [
   "/",
-  "/assets/app.js?v=4",
+  "/assets/app.js?v=6",
   "/assets/styles.css?v=5",
   "/assets/icon.svg",
   "/manifest.webmanifest"
