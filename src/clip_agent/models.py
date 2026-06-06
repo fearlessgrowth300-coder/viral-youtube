@@ -25,6 +25,7 @@ class ClipCandidate:
     hook: str = ""
     description: str = ""
     tags: tuple[str, ...] = ()
+    engagement_question: str = ""
 
 
 @dataclass(frozen=True)

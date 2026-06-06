@@ -113,6 +113,35 @@ def test_start_run_rejects_unavailable_youtube_before_creating_job(monkeypatch) 
         raise AssertionError("expected ValueError")
 
 
+def test_start_run_long_mode_forces_one_horizontal_video(monkeypatch) -> None:
+    captured = {}
+
+    class FakeThread:
+        def __init__(self, target, args, daemon):
+            captured["options"] = args[1]
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr("clip_agent.web.threading.Thread", FakeThread)
+    start_run_job(
+        {
+            "use_sample": True,
+            "generation_mode": "long",
+            "long_duration_seconds": 600,
+            "horizontal": False,
+            "clips": 8,
+        },
+        WebState(minimal_config()),
+    )
+    options = captured["options"]
+    assert options.generation_mode == "long"
+    assert options.max_clips == 1
+    assert options.clip_length_seconds == 600
+    assert options.vertical is False
+    assert options.live_capture_seconds >= 600
+
+
 def test_cancel_job_marks_running_job_as_cancelling() -> None:
     state = WebState(minimal_config())
     state.put_job(JobState(id="job-1", source="sample.mp4", status="running", message="Rendering"))

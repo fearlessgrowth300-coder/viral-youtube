@@ -4,11 +4,15 @@ import json
 import html
 import re
 import subprocess
+import time
 from pathlib import Path
+
+import requests
 
 from .config import AgentConfig
 from .ffmpeg import ffmpeg_bin, probe_duration
 from .models import TranscriptSegment
+from .source import is_youtube_url
 
 
 SRT_BLOCK_RE = re.compile(
@@ -25,6 +29,14 @@ VTT_CUE_RE = re.compile(
     r"(?P<text>.*?)(?=\n\s*\n|\Z)",
     re.DOTALL,
 )
+
+
+class TranscriptAPIError(RuntimeError):
+    pass
+
+
+class TranscriptAPICreditsExhausted(TranscriptAPIError):
+    pass
 
 
 def parse_srt_time(value: str) -> float:
@@ -195,6 +207,101 @@ def split_text_into_segments(text: str, duration: float) -> list[TranscriptSegme
     ]
 
 
+def transcript_api_error_message(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text.strip() or f"HTTP {response.status_code}"
+    detail = payload.get("detail") if isinstance(payload, dict) else payload
+    if isinstance(detail, dict):
+        return str(detail.get("message") or detail.get("reason") or detail)
+    return str(detail or payload)
+
+
+def fetch_transcript_api(
+    youtube_url: str,
+    run_dir: Path,
+    config: AgentConfig,
+    retries: int = 2,
+) -> list[TranscriptSegment]:
+    if not config.transcript_api_key or not is_youtube_url(youtube_url):
+        return []
+    endpoint = f"{config.transcript_api_base_url.rstrip('/')}/youtube/transcript"
+    response: requests.Response | None = None
+    for attempt in range(retries + 1):
+        try:
+            response = requests.get(
+                endpoint,
+                params={"video_url": youtube_url},
+                headers={"Authorization": f"Bearer {config.transcript_api_key}"},
+                timeout=45,
+            )
+        except requests.RequestException as exc:
+            if attempt >= retries:
+                raise TranscriptAPIError(f"TranscriptAPI connection failed: {exc}") from exc
+            time.sleep(2**attempt)
+            continue
+        if response.status_code not in {408, 429, 503} or attempt >= retries:
+            break
+        retry_after = response.headers.get("Retry-After")
+        try:
+            delay = float(retry_after) if retry_after else float(2**attempt)
+        except ValueError:
+            delay = float(2**attempt)
+        time.sleep(max(1.0, min(delay, 8.0)))
+
+    assert response is not None
+    if response.status_code == 402:
+        raise TranscriptAPICreditsExhausted(
+            "TranscriptAPI credits are exhausted. Open Settings and replace the key or top up credits."
+        )
+    if response.status_code == 401:
+        raise TranscriptAPIError(
+            "TranscriptAPI rejected the key. Open Settings and enter a valid TranscriptAPI key."
+        )
+    if response.status_code == 429:
+        raise TranscriptAPIError(
+            "TranscriptAPI rate limit reached. Wait briefly or change the key in Settings."
+        )
+    if response.status_code in {404, 422}:
+        return []
+    if not response.ok:
+        raise TranscriptAPIError(
+            f"TranscriptAPI failed ({response.status_code}): {transcript_api_error_message(response)}"
+        )
+
+    payload = response.json()
+    raw_segments = payload.get("transcript") or payload.get("segments") or []
+    segments: list[TranscriptSegment] = []
+    for item in raw_segments:
+        if not isinstance(item, dict):
+            continue
+        text = clean_caption_text(str(item.get("text") or ""))
+        if not text:
+            continue
+        start = float(item.get("start") or 0.0)
+        duration = float(item.get("duration") or 0.0)
+        end = float(item.get("end") or (start + max(0.2, duration)))
+        segments.append(TranscriptSegment(start=start, end=max(start + 0.2, end), text=text))
+    if segments:
+        cache_path = run_dir / "transcriptapi.json"
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "video_id": payload.get("video_id"),
+                    "language": payload.get("language"),
+                    "segments": [
+                        {"start": segment.start, "end": segment.end, "text": segment.text}
+                        for segment in segments
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    return segments
+
+
 def transcribe_with_openai(
     source: str, run_dir: Path, config: AgentConfig, max_seconds: int | None = None
 ) -> list[TranscriptSegment]:
@@ -252,10 +359,15 @@ def get_transcript(
     config: AgentConfig,
     transcript_path: Path | None = None,
     max_seconds: int | None = None,
+    source_url: str | None = None,
 ) -> list[TranscriptSegment]:
     if transcript_path:
         return load_transcript_file(transcript_path)
     sidecar = find_sidecar_transcript(source)
     if sidecar:
         return align_segments_to_source(load_transcript_file(sidecar), source)
+    if source_url:
+        transcript_api_segments = fetch_transcript_api(source_url, run_dir, config)
+        if transcript_api_segments:
+            return align_segments_to_source(transcript_api_segments, source)
     return transcribe_with_openai(source, run_dir, config, max_seconds=max_seconds)

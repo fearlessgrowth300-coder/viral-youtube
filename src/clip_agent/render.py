@@ -215,7 +215,37 @@ def hook_filter(candidate: ClipCandidate, render_quality: str = "hd", vertical: 
         f"box=1:boxcolor=white@0.95:boxborderw={boxborder}:"
         "borderw=0:"
         "text_align=center:"
-        "line_spacing=8"
+        "line_spacing=8:"
+        "enable='between(t,0,5)'"
+    )
+
+
+def engagement_filter(
+    candidate: ClipCandidate,
+    render_quality: str = "hd",
+    vertical: bool = True,
+) -> str:
+    question = candidate.engagement_question.strip()
+    if not question:
+        return ""
+    width, height = render_dimensions(vertical, render_quality)
+    scale = min(width / 1080, height / 1920) if vertical else min(width / 1920, height / 1080)
+    fontsize = max(32, int(round(38 * scale)))
+    boxborder = max(10, int(round(14 * scale)))
+    wrapped = wrap_text(question.upper(), line_length=24 if vertical else 42, max_lines=2)
+    text = escape_drawtext(wrapped, limit=100)
+    clip_duration = max(1.0, candidate.end - candidate.start)
+    show_from = max(5.0, clip_duration - 8.0)
+    return (
+        "drawtext="
+        f"text='{text}':"
+        "x=(w-text_w)/2:y=h*0.72-text_h/2:"
+        f"font='Arial':fontsize={fontsize}:fontcolor=white:"
+        f"box=1:boxcolor=black@0.82:boxborderw={boxborder}:"
+        "borderw=0:"
+        "text_align=center:"
+        "line_spacing=6:"
+        f"enable='between(t,{show_from:.2f},{clip_duration:.2f})'"
     )
 
 
@@ -233,6 +263,7 @@ def video_filter(
     auto_hook: bool,
     caption_style: str = "karaoke",
     render_quality: str = "hd",
+    interaction_prompt: bool = True,
 ) -> str:
     settings = render_quality_settings(render_quality)
     width, height = render_dimensions(vertical, render_quality)
@@ -241,6 +272,7 @@ def video_filter(
         for item in (
             subtitle_filter(srt_path, caption_style),
             hook_filter(candidate, render_quality, vertical) if auto_hook else "",
+            engagement_filter(candidate, render_quality, vertical) if interaction_prompt else "",
         )
         if item
     ]
@@ -269,6 +301,7 @@ def render_clip(
     auto_hook: bool = True,
     caption_style: str = "karaoke",
     render_quality: str = "hd",
+    interaction_prompt: bool = True,
     progress: ProgressCallback | None = None,
     progress_start: int = 0,
     progress_end: int = 100,
@@ -312,7 +345,17 @@ def render_clip(
         args.extend(["-i", str(generated_voiceover_path)])
 
     render_settings = render_quality_settings(render_quality)
-    filter_parts = [video_filter(srt_path, vertical, candidate, auto_hook, caption_style, render_quality)]
+    filter_parts = [
+        video_filter(
+            srt_path,
+            vertical,
+            candidate,
+            auto_hook,
+            caption_style,
+            render_quality,
+            interaction_prompt,
+        )
+    ]
     map_audio = ["-map", "0:a?"]
     if audio_inputs:
         original_volume = "0.28" if has_ai_voiceover else "1.0"
@@ -372,6 +415,7 @@ def render_clip(
         "has_ai_voiceover": has_ai_voiceover,
         "caption_style": caption_style,
         "render_quality": render_quality,
+        "interaction_prompt": interaction_prompt,
         "disclosure": "Contains AI-generated voiceover." if has_ai_voiceover else "",
     }
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")

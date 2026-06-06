@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from .config import AgentConfig
+from .config import AgentConfig, get_or_create_settings_pin, save_local_settings
 from .pipeline import RunOptions, run_once
 from .publishers.dispatcher import publish_queue
 from .source import analyze_source, is_blocking_youtube_error, is_youtube_url
@@ -52,6 +52,7 @@ class JobState:
 class WebState:
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
+        self.settings_pin = get_or_create_settings_pin()
         self.jobs: dict[str, JobState] = {}
         self.cancelled_job_ids: set[str] = set()
         self.lock = threading.Lock()
@@ -297,6 +298,48 @@ def publish_setup(config: AgentConfig) -> dict[str, Any]:
     }
 
 
+def settings_status(config: AgentConfig) -> dict[str, Any]:
+    return {
+        "transcript_api_configured": bool(config.transcript_api_key),
+        "openai_configured": bool(config.openai_api_key),
+        "youtube_client_secrets_configured": bool(config.youtube_client_secrets),
+        "youtube_client_secrets": str(config.youtube_client_secrets or ""),
+        "tiktok_configured": bool(config.tiktok_access_token),
+        "instagram_configured": bool(config.instagram_access_token),
+        "instagram_user_id": config.instagram_user_id or "",
+        "public_media_base_url": config.public_media_base_url or "",
+        "publish_enabled": config.publish_enabled,
+    }
+
+
+def update_app_settings(payload: dict[str, Any], state: WebState, supplied_pin: str) -> dict[str, Any]:
+    if not supplied_pin or supplied_pin != state.settings_pin:
+        raise PermissionError("The Settings PIN is incorrect.")
+    updates: dict[str, object] = {}
+    field_map = {
+        "transcript_api_key": "TRANSCRIPT_API_KEY",
+        "openai_api_key": "OPENAI_API_KEY",
+        "youtube_client_secrets": "YOUTUBE_CLIENT_SECRETS",
+        "tiktok_access_token": "TIKTOK_ACCESS_TOKEN",
+        "instagram_access_token": "INSTAGRAM_ACCESS_TOKEN",
+        "instagram_user_id": "INSTAGRAM_USER_ID",
+        "public_media_base_url": "PUBLIC_MEDIA_BASE_URL",
+    }
+    for field_name, setting_name in field_map.items():
+        value = str(payload.get(field_name) or "").strip()
+        if value:
+            updates[setting_name] = value
+    if "publish_enabled" in payload:
+        updates["PUBLISH_ENABLED"] = "true" if safe_bool(payload.get("publish_enabled")) else "false"
+    save_local_settings(updates)
+    state.config = AgentConfig.from_env()
+    return {
+        "saved": True,
+        "settings": settings_status(state.config),
+        "message": "Settings saved. New jobs will use the updated credentials.",
+    }
+
+
 def youtube_setup_message(config: AgentConfig, has_secrets: bool, has_deps: bool) -> str:
     if not config.publish_enabled:
         return "Set PUBLISH_ENABLED=true in .env and restart."
@@ -535,24 +578,43 @@ def start_run_job(payload: dict[str, Any], state: WebState) -> dict[str, Any]:
                 "or upload a local video file."
             )
 
+    generation_mode = str(payload.get("generation_mode") or "short").strip().lower()
+    if generation_mode not in {"short", "long"}:
+        generation_mode = "short"
+    if generation_mode == "long":
+        requested_seconds = safe_int(payload.get("long_duration_seconds"), 600, 60, 7200)
+        max_clips = 1
+        vertical = False
+    else:
+        requested_seconds = safe_int(payload.get("clip_length"), 45, 5, 180)
+        max_clips = safe_int(payload.get("clips"), 10, 1, 10)
+        vertical = not safe_bool(payload.get("horizontal"))
+
     job = JobState(id=uuid.uuid4().hex[:12], source=source)
     state.put_job(job)
     options = RunOptions(
         source=source,
         out_dir=PROJECT_ROOT / "runs" / "web",
         transcript_path=transcript_path,
-        max_clips=safe_int(payload.get("clips"), 10, 1, 10),
-        clip_length_seconds=safe_int(payload.get("clip_length"), 45, 5, 180),
-        vertical=not safe_bool(payload.get("horizontal")),
+        max_clips=max_clips,
+        clip_length_seconds=requested_seconds,
+        vertical=vertical,
         enable_voiceover=safe_bool(payload.get("voiceover")),
         auto_hook=True if payload.get("auto_hook") is None else safe_bool(payload.get("auto_hook")),
         clip_model=str(payload.get("clip_model") or "viral"),
         genre=str(payload.get("genre") or "auto"),
         caption_style=str(payload.get("caption_style") or "karaoke"),
         render_quality=str(payload.get("render_quality") or "2k").lower(),
-        live_capture_seconds=safe_int(payload.get("live_capture_minutes"), 5, 1, 30) * 60,
+        live_capture_seconds=max(
+            safe_int(payload.get("live_capture_minutes"), 5, 1, 120) * 60,
+            requested_seconds if generation_mode == "long" else 0,
+        ),
         platforms=sanitize_platforms(payload.get("platforms")),
-        max_transcribe_seconds=safe_int(payload.get("max_transcribe_seconds"), 0, 0, 3600) or None,
+        max_transcribe_seconds=safe_int(payload.get("max_transcribe_seconds"), 0, 0, 7200) or None,
+        generation_mode=generation_mode,
+        interaction_prompt=True
+        if payload.get("interaction_prompt") is None
+        else safe_bool(payload.get("interaction_prompt")),
     )
 
     run_config = state.config
@@ -686,6 +748,7 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                     {
                         "project_root": str(PROJECT_ROOT),
                         "openai_configured": bool(self.app_state.config.openai_api_key),
+                        "transcript_api_configured": bool(self.app_state.config.transcript_api_key),
                         "youtube_download_allowed": self.app_state.config.allow_youtube_download,
                         "publish_enabled": self.app_state.config.publish_enabled,
                         "publish_setup": publish_setup(self.app_state.config),
@@ -696,6 +759,8 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/jobs":
                 write_json(self, {"jobs": self.app_state.list_jobs()})
+            elif path == "/api/settings":
+                write_json(self, {"settings": settings_status(self.app_state.config)})
             elif path.startswith("/api/jobs/"):
                 job = self.app_state.get_job(path.rsplit("/", 1)[-1])
                 write_json(self, job or {"error": "Job not found"}, HTTPStatus.OK if job else HTTPStatus.NOT_FOUND)
@@ -721,6 +786,15 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
             payload = read_json_body(self)
             if parsed.path == "/api/run":
                 write_json(self, {"job": start_run_job(payload, self.app_state)}, HTTPStatus.ACCEPTED)
+            elif parsed.path == "/api/settings":
+                write_json(
+                    self,
+                    update_app_settings(
+                        payload,
+                        self.app_state,
+                        self.headers.get("X-Settings-Pin", ""),
+                    ),
+                )
             elif parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/cancel"):
                 parts = [part for part in parsed.path.split("/") if part]
                 job_id = parts[2] if len(parts) >= 4 else ""

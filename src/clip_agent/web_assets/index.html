@@ -10,7 +10,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/assets/icon.svg">
     <title>Clipper Agent</title>
-    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/styles.css?v=3">
   </head>
   <body>
     <main class="shell">
@@ -20,7 +20,10 @@
           <h1>Clip operations</h1>
         </div>
         <div class="top-actions">
-          <button class="secondary install-button" type="button" id="installAppButton">Install app</button>
+          <div class="header-buttons">
+            <button class="secondary install-button" type="button" id="installAppButton">Install app</button>
+            <button class="secondary" type="button" id="settingsButton">Settings</button>
+          </div>
           <div class="status-row" id="statusRow"></div>
         </div>
       </header>
@@ -52,16 +55,45 @@
             <input id="transcriptInput" name="transcript" placeholder="Optional .srt or .vtt file">
           </label>
 
-          <div class="grid-two">
+          <fieldset class="generation-mode">
+            <legend>Output type</legend>
+            <div class="segmented-control">
+              <label>
+                <input type="radio" name="generationMode" value="short" checked>
+                <span>Viral Shorts</span>
+              </label>
+              <label>
+                <input type="radio" name="generationMode" value="long">
+                <span>Long video</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="grid-two" id="shortModeFields">
             <label>
               <span>Top clips</span>
               <input id="clipsInput" type="number" min="1" max="10" value="10">
             </label>
             <label>
-              <span>Length</span>
+              <span>Length seconds</span>
               <input id="lengthInput" type="number" min="5" max="180" value="45">
             </label>
           </div>
+
+          <section class="long-mode-fields" id="longModeFields" hidden>
+            <label>
+              <span>Long video minutes</span>
+              <input id="longDurationInput" type="number" min="1" max="120" value="10">
+            </label>
+            <div class="duration-presets" aria-label="Long video duration presets">
+              <button type="button" data-duration-minutes="1">1 min</button>
+              <button type="button" data-duration-minutes="2">2 min</button>
+              <button type="button" data-duration-minutes="5">5 min</button>
+              <button type="button" data-duration-minutes="10">10 min</button>
+              <button type="button" data-duration-minutes="20">20 min</button>
+            </div>
+            <p>Long videos render as one horizontal highlight from the strongest continuous section.</p>
+          </section>
 
           <div class="grid-two">
             <label>
@@ -142,7 +174,11 @@
           <div class="switch-row">
             <label class="switch">
               <input id="autoHookInput" type="checkbox" checked>
-              <span>Auto hook</span>
+              <span>5-second bold hook</span>
+            </label>
+            <label class="switch">
+              <input id="interactionInput" type="checkbox" checked>
+              <span>Comment question</span>
             </label>
             <label class="switch">
               <input id="voiceoverInput" type="checkbox">
@@ -310,6 +346,14 @@
           </div>
         </div>
 
+        <div class="upload-field">
+          <label for="manualUploadComment">Pinned comment question</label>
+          <div class="copy-row">
+            <input id="manualUploadComment" readonly>
+            <button class="secondary" type="button" data-copy-target="manualUploadComment">Copy</button>
+          </div>
+        </div>
+
         <div class="manual-actions">
           <a class="secondary" id="manualUploadOpenClip" target="_blank" rel="noreferrer">Open clip</a>
           <a class="secondary" id="manualUploadDownload" target="_blank" rel="noreferrer" download>Download clip</a>
@@ -318,6 +362,65 @@
       </section>
     </div>
 
-    <script src="/assets/app.js" defer></script>
+    <div class="modal-backdrop" id="settingsModal" hidden>
+      <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Local credentials</p>
+            <h2 id="settingsTitle">Settings</h2>
+          </div>
+          <button class="icon-button" type="button" id="settingsClose" aria-label="Close">X</button>
+        </div>
+
+        <div class="settings-status" id="settingsStatus"></div>
+
+        <div class="settings-grid">
+          <label>
+            <span>Settings PIN</span>
+            <input id="settingsPinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Required to save">
+          </label>
+          <label>
+            <span>TranscriptAPI key</span>
+            <input id="transcriptApiKeyInput" type="password" autocomplete="off" placeholder="Leave blank to keep current key">
+          </label>
+          <label>
+            <span>OpenAI API key</span>
+            <input id="openaiApiKeyInput" type="password" autocomplete="off" placeholder="Leave blank to keep current key">
+          </label>
+          <label>
+            <span>YouTube OAuth client JSON path</span>
+            <input id="youtubeSecretsInput" placeholder="C:\path\client_secret.json">
+          </label>
+          <label>
+            <span>TikTok access token</span>
+            <input id="tiktokTokenInput" type="password" autocomplete="off" placeholder="Leave blank to keep current token">
+          </label>
+          <label>
+            <span>Instagram access token</span>
+            <input id="instagramTokenInput" type="password" autocomplete="off" placeholder="Leave blank to keep current token">
+          </label>
+          <label>
+            <span>Instagram user ID</span>
+            <input id="instagramUserInput">
+          </label>
+          <label>
+            <span>Public media base URL</span>
+            <input id="publicMediaUrlInput" type="url" placeholder="https://your-domain.example/media">
+          </label>
+        </div>
+
+        <label class="switch settings-switch">
+          <input id="publishEnabledInput" type="checkbox">
+          <span>Enable configured publishing integrations</span>
+        </label>
+
+        <div class="manual-actions">
+          <button class="primary" type="button" id="saveSettingsButton">Save settings</button>
+          <a class="secondary" href="https://transcriptapi.com/dashboard" target="_blank" rel="noreferrer">TranscriptAPI dashboard</a>
+        </div>
+      </section>
+    </div>
+
+    <script src="/assets/app.js?v=3" defer></script>
   </body>
 </html>

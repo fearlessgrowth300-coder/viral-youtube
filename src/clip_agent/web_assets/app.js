@@ -11,6 +11,7 @@ const startButton = document.querySelector("#startButton");
 const sampleButton = document.querySelector("#sampleButton");
 const refreshButton = document.querySelector("#refreshButton");
 const installAppButton = document.querySelector("#installAppButton");
+const settingsButton = document.querySelector("#settingsButton");
 const jobsList = document.querySelector("#jobsList");
 const runsList = document.querySelector("#runsList");
 const jobCount = document.querySelector("#jobCount");
@@ -31,8 +32,26 @@ const manualUploadFile = document.querySelector("#manualUploadFile");
 const manualUploadTitleField = document.querySelector("#manualUploadTitleField");
 const manualUploadDescription = document.querySelector("#manualUploadDescription");
 const manualUploadTags = document.querySelector("#manualUploadTags");
+const manualUploadComment = document.querySelector("#manualUploadComment");
 const manualUploadOpenClip = document.querySelector("#manualUploadOpenClip");
 const manualUploadDownload = document.querySelector("#manualUploadDownload");
+const settingsModal = document.querySelector("#settingsModal");
+const settingsClose = document.querySelector("#settingsClose");
+const settingsStatus = document.querySelector("#settingsStatus");
+const settingsPinInput = document.querySelector("#settingsPinInput");
+const transcriptApiKeyInput = document.querySelector("#transcriptApiKeyInput");
+const openaiApiKeyInput = document.querySelector("#openaiApiKeyInput");
+const youtubeSecretsInput = document.querySelector("#youtubeSecretsInput");
+const tiktokTokenInput = document.querySelector("#tiktokTokenInput");
+const instagramTokenInput = document.querySelector("#instagramTokenInput");
+const instagramUserInput = document.querySelector("#instagramUserInput");
+const publicMediaUrlInput = document.querySelector("#publicMediaUrlInput");
+const publishEnabledInput = document.querySelector("#publishEnabledInput");
+const saveSettingsButton = document.querySelector("#saveSettingsButton");
+const shortModeFields = document.querySelector("#shortModeFields");
+const longModeFields = document.querySelector("#longModeFields");
+const longDurationInput = document.querySelector("#longDurationInput");
+const horizontalInput = document.querySelector("#horizontalInput");
 let analyzeTimer = null;
 let deferredInstallPrompt = null;
 
@@ -44,9 +63,10 @@ function pill(text, tone = "") {
 }
 
 async function api(path, options = {}) {
+  const { headers = {}, ...requestOptions } = options;
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options
+    ...requestOptions,
+    headers: { "Content-Type": "application/json", ...headers }
   });
   const payload = await response.json();
   if (!response.ok) {
@@ -61,6 +81,19 @@ function selectedPlatforms() {
 
 function selectedCaptionStyle() {
   return document.querySelector('input[name="captionStyle"]:checked')?.value || "karaoke";
+}
+
+function selectedGenerationMode() {
+  return document.querySelector('input[name="generationMode"]:checked')?.value || "short";
+}
+
+function syncGenerationMode() {
+  const longMode = selectedGenerationMode() === "long";
+  shortModeFields.hidden = longMode;
+  longModeFields.hidden = !longMode;
+  horizontalInput.checked = longMode || horizontalInput.checked;
+  horizontalInput.disabled = longMode;
+  startButton.lastChild.textContent = longMode ? " Generate long video" : " Start clipping";
 }
 
 function selectCaptionPreset(card) {
@@ -194,7 +227,10 @@ function manualUploadMetadata(clip) {
     file: clip.video_path || "",
     title: cleanDisplayText(candidate.title || clip.title || "Clip").slice(0, 100),
     description,
-    tags: tags.join(", ")
+    tags: tags.join(", "),
+    pinnedComment: cleanDisplayText(
+      candidate.engagement_question || "Would you have reacted the same way?"
+    )
   };
 }
 
@@ -261,6 +297,10 @@ async function analyzeSource(sourceValue) {
 function renderStatus(status) {
   statusRow.replaceChildren(
     pill(status.openai_configured ? "OpenAI ready" : "OpenAI off", status.openai_configured ? "ok" : "warn"),
+    pill(
+      status.transcript_api_configured ? "TranscriptAPI ready" : "TranscriptAPI off",
+      status.transcript_api_configured ? "ok" : "warn"
+    ),
     pill(status.publish_enabled ? "Posting on" : "Posting locked", status.publish_enabled ? "ok" : "warn"),
     pill(status.youtube_download_allowed ? "YouTube global on" : "YouTube needs permission", status.youtube_download_allowed ? "ok" : "warn")
   );
@@ -476,14 +516,17 @@ async function startRun(useSample = false) {
       use_sample: useSample,
       source: sourceValue,
       transcript: document.querySelector("#transcriptInput").value,
+      generation_mode: selectedGenerationMode(),
       clips: document.querySelector("#clipsInput").value,
       clip_length: document.querySelector("#lengthInput").value,
+      long_duration_seconds: Math.max(1, Number(longDurationInput.value || 10)) * 60,
       live_capture_minutes: document.querySelector("#liveCaptureInput").value,
       render_quality: document.querySelector("#qualityInput").value,
       clip_model: document.querySelector("#clipModelInput").value,
       genre: document.querySelector("#genreInput").value,
       caption_style: selectedCaptionStyle(),
       auto_hook: document.querySelector("#autoHookInput").checked,
+      interaction_prompt: document.querySelector("#interactionInput").checked,
       voiceover: document.querySelector("#voiceoverInput").checked,
       horizontal: document.querySelector("#horizontalInput").checked,
       allow_youtube_download: youtubeAllowInput.checked,
@@ -561,12 +604,70 @@ async function deleteClip(run, clip) {
   await refreshAll();
 }
 
+function settingsPill(label, configured) {
+  return pill(`${label} ${configured ? "ready" : "not set"}`, configured ? "ok" : "warn");
+}
+
+function renderSettingsStatus(settings) {
+  settingsStatus.replaceChildren(
+    settingsPill("TranscriptAPI", settings.transcript_api_configured),
+    settingsPill("OpenAI", settings.openai_configured),
+    settingsPill("YouTube", settings.youtube_client_secrets_configured),
+    settingsPill("TikTok", settings.tiktok_configured),
+    settingsPill("Instagram", settings.instagram_configured)
+  );
+  youtubeSecretsInput.value = settings.youtube_client_secrets || "";
+  instagramUserInput.value = settings.instagram_user_id || "";
+  publicMediaUrlInput.value = settings.public_media_base_url || "";
+  publishEnabledInput.checked = Boolean(settings.publish_enabled);
+}
+
+async function openSettings() {
+  const payload = await api("/api/settings");
+  renderSettingsStatus(payload.settings);
+  settingsModal.hidden = false;
+}
+
+function closeSettings() {
+  settingsModal.hidden = true;
+}
+
+async function saveSettings() {
+  saveSettingsButton.disabled = true;
+  try {
+    const payload = await api("/api/settings", {
+      method: "POST",
+      headers: { "X-Settings-Pin": settingsPinInput.value.trim() },
+      body: JSON.stringify({
+        transcript_api_key: transcriptApiKeyInput.value.trim(),
+        openai_api_key: openaiApiKeyInput.value.trim(),
+        youtube_client_secrets: youtubeSecretsInput.value.trim(),
+        tiktok_access_token: tiktokTokenInput.value.trim(),
+        instagram_access_token: instagramTokenInput.value.trim(),
+        instagram_user_id: instagramUserInput.value.trim(),
+        public_media_base_url: publicMediaUrlInput.value.trim(),
+        publish_enabled: publishEnabledInput.checked
+      })
+    });
+    renderSettingsStatus(payload.settings);
+    transcriptApiKeyInput.value = "";
+    openaiApiKeyInput.value = "";
+    tiktokTokenInput.value = "";
+    instagramTokenInput.value = "";
+    window.alert(payload.message);
+    await refreshAll();
+  } finally {
+    saveSettingsButton.disabled = false;
+  }
+}
+
 function openManualUpload(clip) {
   const metadata = manualUploadMetadata(clip);
   manualUploadFile.value = metadata.file;
   manualUploadTitleField.value = metadata.title;
   manualUploadDescription.value = metadata.description;
   manualUploadTags.value = metadata.tags;
+  manualUploadComment.value = metadata.pinnedComment;
   manualUploadOpenClip.href = clip.video_url;
   manualUploadDownload.href = clip.video_url;
   manualUploadDownload.setAttribute("download", "");
@@ -591,6 +692,19 @@ refreshButton.addEventListener("click", () => {
   refreshAll().catch((error) => window.alert(error.message));
 });
 
+settingsButton.addEventListener("click", () => {
+  openSettings().catch((error) => window.alert(error.message));
+});
+settingsClose.addEventListener("click", closeSettings);
+saveSettingsButton.addEventListener("click", () => {
+  saveSettings().catch((error) => window.alert(error.message));
+});
+settingsModal.addEventListener("click", (event) => {
+  if (event.target === settingsModal) {
+    closeSettings();
+  }
+});
+
 manualUploadClose.addEventListener("click", closeManualUpload);
 manualUploadModal.addEventListener("click", (event) => {
   if (event.target === manualUploadModal) {
@@ -600,6 +714,9 @@ manualUploadModal.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !manualUploadModal.hidden) {
     closeManualUpload();
+  }
+  if (event.key === "Escape" && !settingsModal.hidden) {
+    closeSettings();
   }
 });
 document.querySelectorAll("[data-copy-target]").forEach((button) => {
@@ -616,9 +733,18 @@ document.querySelectorAll("[data-copy-target]").forEach((button) => {
 
 sourceInput.addEventListener("input", scheduleSourceAnalysis);
 sourceInput.addEventListener("paste", () => setTimeout(scheduleSourceAnalysis, 0));
+document.querySelectorAll('input[name="generationMode"]').forEach((input) => {
+  input.addEventListener("change", syncGenerationMode);
+});
+document.querySelectorAll("[data-duration-minutes]").forEach((button) => {
+  button.addEventListener("click", () => {
+    longDurationInput.value = button.dataset.durationMinutes;
+  });
+});
 
 initCaptionPresetCards();
 initPwaInstall();
+syncGenerationMode();
 refreshAll().catch((error) => {
   statusRow.replaceChildren(pill(error.message, "error"));
 });

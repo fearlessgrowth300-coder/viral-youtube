@@ -215,8 +215,11 @@ def make_window(
     score: float,
     context: str = "",
 ) -> ClipCandidate:
-    center = (segment.start + segment.end) / 2
-    start = max(0.0, center - clip_length * 0.45)
+    if clip_length <= 180:
+        lead_in = min(3.0, max(0.8, clip_length * 0.08))
+    else:
+        lead_in = min(30.0, max(8.0, clip_length * 0.08))
+    start = max(0.0, segment.start - lead_in)
     if duration:
         start = min(start, max(0.0, duration - clip_length))
     end = min(duration or start + clip_length, start + clip_length)
@@ -226,6 +229,7 @@ def make_window(
     title = build_title(source_text, rank)
     hook = build_hook(source_text, rank)
     kind = classify_kind(source_text)
+    engagement_question = build_engagement_question(source_text, kind)
     return ClipCandidate(
         start=round(start, 2),
         end=round(end, 2),
@@ -236,8 +240,9 @@ def make_window(
         caption=hook,
         voiceover=build_voiceover(source_text, hook),
         hook=hook,
-        description=build_description(source_text, hook),
+        description=build_description(source_text, hook, engagement_question),
         tags=build_tags(source_text, kind),
+        engagement_question=engagement_question,
     )
 
 
@@ -272,20 +277,20 @@ def build_hook(text: str, rank: int) -> str:
     phrase = hook_phrase(text)
     phrase_upper = phrase.upper()
     if "laugh" in lower or "funny" in lower:
-        return f"WAIT FOR THE LAUGH: {phrase_upper}"[:86]
+        return f"TRY NOT TO LAUGH: {phrase_upper}"[:86]
     if "crazy" in lower or "insane" in lower or "wild" in lower:
-        return f"THIS GETS CRAZY: {phrase_upper}"[:86]
+        return f"THIS REACTION CHANGES EVERYTHING: {phrase_upper}"[:86]
     if "billion" in lower or "massive" in lower or "biggest" in lower:
-        return f"LOOK HOW BIG THIS GETS: {phrase_upper}"[:86]
+        return f"THIS IS BIGGER THAN YOU THINK: {phrase_upper}"[:86]
     if "behind" in lower or "secret" in lower or "revealed" in lower:
-        return f"WAIT FOR WHAT THEY REVEAL: {phrase_upper}"[:86]
+        return f"THEY DID NOT EXPECT THIS REVEAL: {phrase_upper}"[:86]
     if "can't" in lower or "cannot" in lower:
-        return f"DON'T MISS WHY HE CAN'T: {phrase_upper}"[:86]
+        return f"CAN YOU SPOT WHY HE CAN'T: {phrase_upper}"[:86]
     if "?" in text:
-        return f"WAIT FOR THE ANSWER: {phrase_upper}"[:86]
+        return f"CAN YOU ANSWER THIS FIRST: {phrase_upper}"[:86]
     if phrase:
-        return f"KEEP WATCHING: {phrase_upper}"[:86]
-    return f"WAIT FOR THE TURN #{rank}"
+        return f"YOU WILL NOT EXPECT THIS: {phrase_upper}"[:86]
+    return f"CAN YOU PREDICT THE TURN #{rank}"
 
 
 def build_voiceover(text: str, hook: str) -> str:
@@ -295,12 +300,34 @@ def build_voiceover(text: str, hook: str) -> str:
     return f"{hook.title()}. {summary}".strip()
 
 
-def build_description(text: str, hook: str) -> str:
+def build_engagement_question(text: str, kind: str) -> str:
+    lower = clean_social_text(text).lower()
+    if "speed" in lower:
+        return "What's your favorite Speed moment?"
+    if "palestine" in lower:
+        return "What would you have said in this moment?"
+    if kind == "funny":
+        return "Did you laugh before the reaction ended?"
+    if kind == "crazy":
+        return "Did you expect the reaction to go this far?"
+    if kind == "scale":
+        return "Is this bigger than you expected?"
+    if kind == "feel-good":
+        return "What was your favorite part of this moment?"
+    if re.search(r"football|goal|match|game|scored", lower):
+        return "Was this the best moment of the game?"
+    return "Would you have reacted the same way?"
+
+
+def build_description(text: str, hook: str, engagement_question: str = "") -> str:
     clean = clean_social_text(text)
     hook = clean_social_text(hook)
     phrase = hook_phrase(clean)
     body = phrase or clean
-    return f"{hook}. {body[:220]}".strip()
+    parts = [f"{hook}.", body[:220]]
+    if engagement_question:
+        parts.append(f"Question: {engagement_question}")
+    return " ".join(part for part in parts if part).strip()
 
 
 def classify_kind(text: str) -> str:
@@ -380,6 +407,7 @@ def fallback_candidates(duration: float, max_clips: int, clip_length: int) -> li
                 hook=hook,
                 description="Timed clip candidate. Add captions or connect transcription for smarter moment ranking.",
                 tags=("shorts", "highlight"),
+                engagement_question="Would you have reacted the same way?",
             )
         )
     return candidates

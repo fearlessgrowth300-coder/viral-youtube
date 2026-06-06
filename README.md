@@ -58,6 +58,15 @@ The dashboard can start clip runs, show active jobs, preview rendered clips, and
 
 For YouTube URLs, check `YouTube rights` in the form only for videos or live streams you own or have permission to clip.
 
+The dashboard has two generation modes:
+
+- `Viral Shorts` creates several ranked clips, starts close to the reaction payoff, shows a bold hook for the first five seconds, and adds an interaction question near the end.
+- `Long video` creates one horizontal highlight at a requested duration from 1 to 120 minutes.
+
+Use `Settings` to store TranscriptAPI, OpenAI, YouTube, TikTok, and Instagram credentials locally. Credentials are written under the ignored `.secrets` directory and are never returned to browser JavaScript.
+
+When configured, TranscriptAPI is used as a YouTube transcript fallback before audio transcription. Exhausted credits, invalid keys, and rate limits are shown as clear job errors so the key can be replaced in Settings.
+
 ## Phone Access And Install
 
 To use the app from a phone on the same Wi-Fi, run the server on all local network interfaces:

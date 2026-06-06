@@ -5,7 +5,15 @@ from dataclasses import asdict
 
 from .config import AgentConfig
 from .models import ClipCandidate, TranscriptSegment
-from .scoring import build_description, build_hook, build_tags, build_voiceover, classify_kind, is_generic_hook
+from .scoring import (
+    build_description,
+    build_engagement_question,
+    build_hook,
+    build_tags,
+    build_voiceover,
+    classify_kind,
+    is_generic_hook,
+)
 
 
 def refine_candidates_with_openai(
@@ -25,9 +33,11 @@ def refine_candidates_with_openai(
         "You are a short-form video producer. Pick the strongest clips from the transcript. "
         "Favor funny, surprising, emotional, useful, or high-energy moments. "
         "Return only a JSON array. Each item must have start, end, title, reason, score, "
-        "kind, caption, hook, voiceover, description, and tags. The hook is a retention text overlay "
-        "that stays on screen for the whole clip. It must use a specific phrase or claim from the "
-        "transcript and create urgency. Do not use generic hooks like 'watch this part', "
+        "kind, caption, hook, voiceover, description, tags, and engagement_question. "
+        "Start each clip no more than 3 seconds before the strongest reaction or payoff. "
+        "The hook is a bold claim or challenge shown during the first 5 seconds. "
+        "It must use a specific phrase or claim from the transcript and create urgency. "
+        "The engagement_question should invite a short comment. Do not use generic hooks like 'watch this part', "
         "'the hidden part', or 'viral moment'. Keep clips inside the video duration and keep captions short.\n\n"
         f"Video duration seconds: {duration:.1f}\n"
         f"Initial candidates:\n{current}\n\n"
@@ -56,6 +66,10 @@ def refine_candidates_with_openai(
             raw_hook = str(item.get("hook") or item.get("caption") or "")
             hook = raw_hook if raw_hook and not is_generic_hook(raw_hook) else build_hook(text_for_defaults, len(output) + 1)
             hook = hook[:86]
+            engagement_question = str(
+                item.get("engagement_question")
+                or build_engagement_question(text_for_defaults, kind)
+            )[:100]
             output.append(
                 ClipCandidate(
                     start=round(start, 2),
@@ -67,8 +81,12 @@ def refine_candidates_with_openai(
                     caption=str(item.get("caption") or hook)[:120],
                     voiceover=str(item.get("voiceover") or build_voiceover(text_for_defaults, hook))[:220],
                     hook=hook,
-                    description=str(item.get("description") or build_description(text_for_defaults, hook))[:260],
+                    description=str(
+                        item.get("description")
+                        or build_description(text_for_defaults, hook, engagement_question)
+                    )[:320],
                     tags=tuple(item.get("tags") or build_tags(text_for_defaults, kind)),
+                    engagement_question=engagement_question,
                 )
             )
         except (KeyError, TypeError, ValueError):

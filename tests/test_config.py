@@ -1,6 +1,6 @@
 import os
 
-from clip_agent.config import load_env_file
+from clip_agent.config import load_env_file, load_local_settings, save_local_settings
 
 
 def test_load_env_file_does_not_override_existing_env(tmp_path, monkeypatch) -> None:
@@ -26,3 +26,19 @@ def test_load_env_file_strips_utf8_bom_from_key(tmp_path, monkeypatch) -> None:
     monkeypatch.delenv("BOM_VALUE", raising=False)
     load_env_file(env_file)
     assert os.getenv("BOM_VALUE") == "from-file"
+
+
+def test_local_settings_only_persist_allowed_values(tmp_path) -> None:
+    path = tmp_path / "settings.json"
+    save_local_settings(
+        {
+            "TRANSCRIPT_API_KEY": "test-key",
+            "OPENAI_API_KEY": "openai-key",
+            "NOT_ALLOWED": "ignored",
+        },
+        path,
+    )
+    assert load_local_settings(path) == {
+        "TRANSCRIPT_API_KEY": "test-key",
+        "OPENAI_API_KEY": "openai-key",
+    }

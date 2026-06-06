@@ -200,6 +200,7 @@ def candidate_from_media_point(
         hook=hook,
         description=f"{hook}. High-energy clip selected from audio and visual activity around {format_time(point.time)}.",
         tags=("shorts", "viral", "bestmoments", "highlight"),
+        engagement_question="Did you expect the reaction to peak here?",
     )
 
 

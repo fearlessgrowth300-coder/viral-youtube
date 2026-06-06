@@ -1,8 +1,8 @@
-const CACHE_NAME = "clipper-agent-v1";
+const CACHE_NAME = "clipper-agent-v2";
 const APP_SHELL = [
   "/",
-  "/assets/app.js",
-  "/assets/styles.css",
+  "/assets/app.js?v=3",
+  "/assets/styles.css?v=3",
   "/assets/icon.svg",
   "/manifest.webmanifest"
 ];
@@ -36,5 +36,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        return response;
+      })
+      .catch(() => caches.match(request))
+  );
 });

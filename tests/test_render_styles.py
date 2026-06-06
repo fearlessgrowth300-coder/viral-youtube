@@ -2,6 +2,7 @@ from pathlib import Path
 
 from clip_agent.models import ClipCandidate
 from clip_agent.render import (
+    engagement_filter,
     escape_drawtext,
     hook_filter,
     parse_ffmpeg_progress_seconds,
@@ -29,7 +30,7 @@ def test_hook_filter_uses_white_box() -> None:
     assert "boxcolor=white" in rendered
     assert "fontsize=50" in rendered
     assert "text_align=center" in rendered
-    assert "between(t,0,5)" not in rendered
+    assert "between(t,0,5)" in rendered
 
 
 def test_hook_filter_rebuilds_generic_hook_from_reason() -> None:
@@ -45,7 +46,21 @@ def test_hook_filter_rebuilds_generic_hook_from_reason() -> None:
     )
     rendered = hook_filter(generic)
     assert "THE HIDDEN PART" not in rendered
-    assert "MASSIVE" in rendered
+    assert "BIGGER" in rendered
+
+
+def test_engagement_question_appears_near_clip_end() -> None:
+    clip = ClipCandidate(
+        start=10,
+        end=55,
+        title="Reaction",
+        reason="test",
+        score=1,
+        engagement_question="What's your favorite moment?",
+    )
+    rendered = engagement_filter(clip)
+    assert "YOUR FAVORITE" in rendered
+    assert "between(t,37.00,45.00)" in rendered
 
 
 def test_caption_style_can_disable_subtitles() -> None:

@@ -41,6 +41,8 @@ class RunOptions:
     live_capture_seconds: int = 300
     platforms: tuple[str, ...] = ()
     max_transcribe_seconds: int | None = None
+    generation_mode: str = "short"
+    interaction_prompt: bool = True
 
 
 def source_slug(source: str) -> str:
@@ -82,6 +84,36 @@ def clamp_candidate_length(candidate: ClipCandidate, max_seconds: int, duration:
     return replace(candidate, end=round(end, 2))
 
 
+def prepare_long_form_candidate(
+    candidate: ClipCandidate,
+    requested_seconds: int,
+    duration: float,
+) -> ClipCandidate:
+    requested_seconds = max(60, requested_seconds)
+    if duration and requested_seconds >= duration:
+        start = 0.0
+        end = duration
+    else:
+        start = candidate.start
+        end = min(duration or start + requested_seconds, start + requested_seconds)
+    tags = tuple(
+        dict.fromkeys(
+            [tag for tag in candidate.tags if tag not in {"shorts", "bestmoments"}]
+            + ["longform", "highlight"]
+        )
+    )
+    title = candidate.title
+    if "highlight" not in title.lower():
+        title = f"{title} - Extended Highlight"
+    return replace(
+        candidate,
+        start=round(start, 2),
+        end=round(end, 2),
+        title=title[:100],
+        tags=tags,
+    )
+
+
 def run_once(
     options: RunOptions,
     config: AgentConfig,
@@ -106,6 +138,7 @@ def run_once(
         config,
         transcript_path=options.transcript_path,
         max_seconds=options.max_transcribe_seconds,
+        source_url=options.source,
     )
     if transcript:
         emit_progress(progress, "select", 56, "Selecting viral transcript moments")
@@ -131,6 +164,14 @@ def run_once(
         clamp_candidate_length(candidate, options.clip_length_seconds, duration)
         for candidate in candidates
     ]
+    if options.generation_mode == "long":
+        candidates = [
+            prepare_long_form_candidate(
+                candidates[0],
+                options.clip_length_seconds,
+                duration,
+            )
+        ] if candidates else []
 
     clips_dir = run_dir / "clips"
     total_candidates = max(1, len(candidates))
@@ -156,6 +197,7 @@ def run_once(
                     auto_hook=options.auto_hook,
                     caption_style=options.caption_style,
                     render_quality=options.render_quality,
+                    interaction_prompt=options.interaction_prompt,
                     progress=progress,
                     progress_start=render_start,
                     progress_end=render_end,
@@ -175,6 +217,7 @@ def run_once(
     manifest = result.to_jsonable()
     manifest["duration"] = duration
     manifest["transcript_segments"] = len(transcript)
+    manifest["generation_mode"] = options.generation_mode
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     append_publish_queue(run_dir / "publish_queue.jsonl", result.clips, list(options.platforms))
     emit_progress(progress, "done", 100, f"Rendered {len(result.clips)} clip(s)")
