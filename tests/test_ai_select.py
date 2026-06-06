@@ -37,3 +37,22 @@ def test_viral_analysis_falls_back_and_caches_without_openai(
     assert first["moments"][0]["score"] >= first["moments"][-1]["score"]
     assert second["cached"] is True
     assert ai_select.candidates_from_viral_analysis(second, 120)
+
+
+def test_analysis_model_candidates_add_compatible_fallbacks() -> None:
+    assert ai_select.analysis_model_candidates("gpt-5-mini") == [
+        "gpt-5-mini",
+        "gpt-4.1-mini",
+        "gpt-4o-mini",
+    ]
+    assert ai_select.analysis_model_candidates("gpt-4.1-mini") == [
+        "gpt-4.1-mini",
+        "gpt-4o-mini",
+    ]
+
+
+def test_model_access_error_uses_fallback() -> None:
+    assert ai_select.should_try_fallback_model(
+        RuntimeError("organization must be verified; code=model_not_found")
+    )
+    assert not ai_select.should_try_fallback_model(RuntimeError("rate limit reached"))

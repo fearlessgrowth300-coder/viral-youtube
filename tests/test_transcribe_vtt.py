@@ -6,6 +6,7 @@ import requests
 
 from clip_agent.transcribe import (
     TranscriptAPICreditsExhausted,
+    TranscriptAPIError,
     fetch_transcript_api,
     find_sidecar_transcript,
     load_transcript_file,
@@ -53,7 +54,9 @@ def response(status: int, payload: dict) -> requests.Response:
 def test_fetch_transcript_api_returns_timestamped_segments(tmp_path: Path, monkeypatch) -> None:
     def fake_get(url, params, headers, timeout):
         assert url.endswith("/youtube/transcript")
-        assert params["video_url"].startswith("https://youtu.be/")
+        assert params["video_url"] == "abcdefghijk"
+        assert params["format"] == "json"
+        assert params["include_timestamp"] == "true"
         assert headers["Authorization"] == "Bearer test-key"
         return response(
             200,
@@ -81,6 +84,67 @@ def test_fetch_transcript_api_returns_timestamped_segments(tmp_path: Path, monke
     assert segments[0].end == 6.5
     assert segments[0].text == "This gets wild"
     assert (tmp_path / "transcriptapi.json").exists()
+
+
+def test_fetch_transcript_api_normalizes_live_url_to_video_id(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_get(url, params, headers, timeout):
+        assert params["video_url"] == "7REUA9nQWIA"
+        return response(
+            200,
+            {
+                "video_id": "7REUA9nQWIA",
+                "language": "en",
+                "transcript": [
+                    {"text": "Live transcript works", "start": 8.0, "duration": 2.0},
+                ],
+            },
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    config = SimpleNamespace(
+        transcript_api_key="test-key",
+        transcript_api_base_url="https://transcriptapi.com/api/v2",
+    )
+    segments = fetch_transcript_api(
+        "https://www.youtube.com/live/7REUA9nQWIA?si=test",
+        tmp_path,
+        config,
+        cache_root=tmp_path / "cache",
+    )
+    assert segments[0].text == "Live transcript works"
+
+
+def test_fetch_transcript_api_reports_invalid_request(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *args, **kwargs: response(
+            422,
+            {"detail": "Invalid YouTube URL or video ID"},
+        ),
+    )
+    config = SimpleNamespace(
+        transcript_api_key="test-key",
+        transcript_api_base_url="https://transcriptapi.com/api/v2",
+    )
+    try:
+        fetch_transcript_api(
+            "https://youtu.be/abcdefghijk",
+            tmp_path,
+            config,
+            cache_root=tmp_path / "cache",
+        )
+    except TranscriptAPIError as exc:
+        assert "rejected this YouTube link" in str(exc)
+        assert "Invalid YouTube URL" in str(exc)
+    else:
+        raise AssertionError("expected TranscriptAPIError")
 
 
 def test_fetch_transcript_api_reports_exhausted_credits(tmp_path: Path, monkeypatch) -> None:

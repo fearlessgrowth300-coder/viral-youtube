@@ -313,12 +313,17 @@ def fetch_transcript_api(
     if cached:
         return cached
     endpoint = f"{config.transcript_api_base_url.rstrip('/')}/youtube/transcript"
+    video_reference = extract_youtube_id(youtube_url) or youtube_url
     response: requests.Response | None = None
     for attempt in range(retries + 1):
         try:
             response = requests.get(
                 endpoint,
-                params={"video_url": youtube_url},
+                params={
+                    "video_url": video_reference,
+                    "format": "json",
+                    "include_timestamp": "true",
+                },
                 headers={"Authorization": f"Bearer {config.transcript_api_key}"},
                 timeout=45,
             )
@@ -349,8 +354,13 @@ def fetch_transcript_api(
         raise TranscriptAPIError(
             "TranscriptAPI rate limit reached. Wait briefly or change the key in Settings."
         )
-    if response.status_code in {404, 422}:
+    if response.status_code == 404:
         return []
+    if response.status_code == 422:
+        raise TranscriptAPIError(
+            "TranscriptAPI rejected this YouTube link: "
+            f"{transcript_api_error_message(response)}"
+        )
     if not response.ok:
         raise TranscriptAPIError(
             f"TranscriptAPI failed ({response.status_code}): {transcript_api_error_message(response)}"

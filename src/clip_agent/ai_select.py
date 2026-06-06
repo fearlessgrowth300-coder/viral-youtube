@@ -57,9 +57,34 @@ def load_cached_viral_analysis(
         return None
     if segments and payload.get("transcript_fingerprint") != transcript_fingerprint(segments):
         return None
-    if model and payload.get("model") not in {model, "local-scoring"}:
+    cached_request_model = payload.get("requested_model") or payload.get("model")
+    if model and cached_request_model != model:
         return None
     return payload
+
+
+def analysis_model_candidates(configured_model: str) -> list[str]:
+    return list(
+        dict.fromkeys(
+            model
+            for model in (configured_model, "gpt-4.1-mini", "gpt-4o-mini")
+            if model
+        )
+    )
+
+
+def should_try_fallback_model(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "model_not_found",
+            "must be verified",
+            "does not exist",
+            "do not have access",
+            "not have access",
+        )
+    )
 
 
 def transcript_prompt_text(
@@ -176,7 +201,8 @@ def analyze_transcript_for_viral_moments(
     config: AgentConfig,
     max_moments: int = 10,
 ) -> dict[str, Any]:
-    cached = load_cached_viral_analysis(source_url, segments, config.openai_analysis_model)
+    requested_model = config.openai_analysis_model if config.openai_api_key else None
+    cached = load_cached_viral_analysis(source_url, segments, requested_model)
     if cached:
         return {**cached, "cached": True}
     if not segments:
@@ -211,7 +237,20 @@ def analyze_transcript_for_viral_moments(
             from openai import OpenAI
 
             client = OpenAI(api_key=config.openai_api_key)
-            response = client.responses.create(model=config.openai_analysis_model, input=prompt)
+            response = None
+            selected_model = ""
+            last_model_error: Exception | None = None
+            for model in analysis_model_candidates(config.openai_analysis_model):
+                try:
+                    response = client.responses.create(model=model, input=prompt)
+                    selected_model = model
+                    break
+                except Exception as exc:
+                    last_model_error = exc
+                    if not should_try_fallback_model(exc):
+                        raise
+            if response is None:
+                raise last_model_error or RuntimeError("No OpenAI analysis model was available.")
             parsed = extract_json_response(getattr(response, "output_text", "") or "")
             raw_moments = parsed.get("moments") if isinstance(parsed, dict) else []
             candidate_items = []
@@ -226,7 +265,8 @@ def analyze_transcript_for_viral_moments(
             payload = {
                 "source": source_url,
                 "provider": "openai",
-                "model": config.openai_analysis_model,
+                "model": selected_model,
+                "requested_model": config.openai_analysis_model,
                 "transcript_fingerprint": transcript_fingerprint(segments),
                 "transcript_segments": len(segments),
                 "summary": str(parsed.get("summary") or "OpenAI ranked the strongest transcript moments."),
