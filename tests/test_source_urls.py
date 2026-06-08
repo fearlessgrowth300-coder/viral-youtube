@@ -7,6 +7,7 @@ from clip_agent.source import (
     SourcePermissionError,
     analyze_source,
     clean_youtube_error,
+    download_remote_media_source,
     extract_youtube_id,
     is_blocking_youtube_error,
     is_live_info,
@@ -68,6 +69,47 @@ def test_prepare_source_checks_url_before_path_exists() -> None:
         assert "ALLOW_YOUTUBE_DOWNLOAD=true" in str(exc)
     else:
         raise AssertionError("expected SourcePermissionError")
+
+
+def test_download_remote_media_source_reports_progress(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / "movie.mp4"
+    chunks = [b"x" * 600_000, b"y" * 600_000]
+
+    class FakeDownloadResponse:
+        headers = {"Content-Length": "1200000"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            return iter(chunks)
+
+    monkeypatch.setattr(
+        "clip_agent.source.remote_media_destination",
+        lambda source: destination,
+    )
+    monkeypatch.setattr(
+        "clip_agent.source.requests.get",
+        lambda *args, **kwargs: FakeDownloadResponse(),
+    )
+    updates = []
+    result = download_remote_media_source(
+        "https://archive.org/download/open/movie.mp4",
+        progress=updates.append,
+    )
+    assert result == str(destination.resolve())
+    assert destination.stat().st_size == 1_200_000
+    assert updates[-1]["progress"] == 34
+    assert updates[-1]["message"] == "Open movie download ready"
 
 
 def test_youtube_download_options_include_ffmpeg_location(tmp_path: Path) -> None:

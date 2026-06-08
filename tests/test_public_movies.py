@@ -41,7 +41,7 @@ def test_search_public_domain_movies_filters_license(monkeypatch) -> None:
                 {
                     "identifier": "not_public",
                     "title": "Not public",
-                    "licenseurl": "https://creativecommons.org/licenses/by/4.0/",
+                    "licenseurl": "https://creativecommons.org/licenses/by-nc/4.0/",
                 },
             ],
         }
@@ -52,6 +52,13 @@ def test_search_public_domain_movies_filters_license(monkeypatch) -> None:
     )
     result = search_public_domain_movies("comedy")
     assert [movie["identifier"] for movie in result["movies"]] == ["his_girl_friday"]
+
+
+def test_empty_movie_search_returns_modern_featured_films() -> None:
+    result = search_public_domain_movies("")
+    assert result["featured"] is True
+    assert result["movies"][0]["year"] == "2022"
+    assert result["movies"][0]["identifier"] == "charge-blender-open-movie-1608p"
 
 
 def test_choose_movie_file_prefers_higher_quality() -> None:

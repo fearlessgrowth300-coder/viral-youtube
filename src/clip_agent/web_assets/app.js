@@ -126,10 +126,10 @@ function closeMovieLibrary() {
 function renderMovieLibrary(movies) {
   if (!movies.length) {
     movieGrid.replaceChildren();
-    movieLibraryStatus.textContent = "No public-domain movies matched that search.";
+    movieLibraryStatus.textContent = "No open movies matched that search.";
     return;
   }
-  movieLibraryStatus.textContent = `${movies.length} public-domain result(s)`;
+  movieLibraryStatus.textContent = `${movies.length} open movie result(s)`;
   const cards = movies.map((movie) => {
     const card = document.createElement("article");
     card.className = "movie-card";
@@ -142,11 +142,14 @@ function renderMovieLibrary(movies) {
     title.textContent = movie.title;
     const meta = document.createElement("p");
     meta.className = "movie-meta";
-    meta.textContent = [movie.year, `${Number(movie.downloads || 0).toLocaleString()} views`]
+    meta.textContent = [
+      movie.year,
+      movie.featured ? "Featured HD" : `${Number(movie.downloads || 0).toLocaleString()} views`
+    ]
       .filter(Boolean)
       .join(" | ");
     const description = document.createElement("p");
-    description.textContent = movie.description || "Public-domain movie from Internet Archive.";
+    description.textContent = movie.description || "Open-licensed movie from Internet Archive.";
     const actions = document.createElement("div");
     actions.className = "movie-actions";
     const details = document.createElement("a");
@@ -173,7 +176,9 @@ function renderMovieLibrary(movies) {
 }
 
 async function searchPublicMovies() {
-  movieLibraryStatus.textContent = "Searching public-domain movies...";
+  movieLibraryStatus.textContent = movieSearchInput.value.trim()
+    ? "Searching open movies..."
+    : "Loading featured modern open movies...";
   movieGrid.replaceChildren();
   const payload = await api(`/api/public-movies?query=${encodeURIComponent(movieSearchInput.value.trim())}`);
   renderMovieLibrary(payload.movies || []);
@@ -191,7 +196,7 @@ async function selectPublicMovie(movieSummary) {
   selectedMovieTitle.textContent = movie.title;
   selectedMovieMeta.textContent = [
     movie.year,
-    "Public domain",
+    movie.license_url?.includes("/by/") ? "CC BY" : "Open license",
     formatBytes(movie.file_size),
     movie.transcript_path ? "Subtitles ready" : "No subtitles"
   ].filter(Boolean).join(" | ");
@@ -949,11 +954,10 @@ settingsModal.addEventListener("click", (event) => {
 
 movieLibraryButton.addEventListener("click", () => {
   movieLibraryModal.hidden = false;
-  if (!movieGrid.children.length) {
-    searchPublicMovies().catch((error) => {
-      movieLibraryStatus.textContent = error.message;
-    });
-  }
+  movieSearchInput.value = "";
+  searchPublicMovies().catch((error) => {
+    movieLibraryStatus.textContent = error.message;
+  });
 });
 movieLibraryClose.addEventListener("click", closeMovieLibrary);
 movieLibraryModal.addEventListener("click", (event) => {

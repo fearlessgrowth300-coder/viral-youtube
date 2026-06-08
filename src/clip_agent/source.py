@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 
 from .config import AgentConfig
 from .ffmpeg import ffmpeg_bin
+from .paths import CACHE_ROOT
 
 
 class SourcePermissionError(RuntimeError):
@@ -20,6 +22,8 @@ class SourcePermissionError(RuntimeError):
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 YOUTUBE_HOST_RE = re.compile(r"(^|\.)youtube\.com$|(^|\.)youtu\.be$")
+TRUSTED_MEDIA_HOST_RE = re.compile(r"(^|\.)archive\.org$|(^|\.)download\.blender\.org$")
+MAX_REMOTE_MEDIA_BYTES = 8_000_000_000
 
 
 def emit_source_progress(
@@ -42,6 +46,12 @@ def is_youtube_url(value: str) -> bool:
         return False
     parsed = urlparse(value)
     return bool(YOUTUBE_HOST_RE.search(parsed.hostname or ""))
+
+
+def is_trusted_media_url(value: str) -> bool:
+    if not is_url(value):
+        return False
+    return bool(TRUSTED_MEDIA_HOST_RE.search(urlparse(value).hostname or ""))
 
 
 def is_youtube_live_url(value: str) -> bool:
@@ -84,6 +94,8 @@ def prepare_source(
                 progress=progress,
                 live_capture_seconds=live_capture_seconds,
             )
+        if is_trusted_media_url(source):
+            return download_remote_media_source(source, progress=progress)
         emit_source_progress(progress, "download", 8, "Using remote media URL")
         return source
 
@@ -93,6 +105,66 @@ def prepare_source(
         return str(candidate_path.resolve())
 
     raise FileNotFoundError(f"Source does not exist and is not a URL: {source}")
+
+
+def remote_media_destination(source: str) -> Path:
+    parsed = urlparse(source)
+    original_name = unquote(Path(parsed.path).name) or "open-movie.mp4"
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", original_name).strip("-.")[:100]
+    if not Path(safe_name).suffix:
+        safe_name += ".mp4"
+    digest = hashlib.sha1(source.encode("utf-8")).hexdigest()[:12]
+    return CACHE_ROOT / "public-media" / f"{digest}-{safe_name}"
+
+
+def download_remote_media_source(
+    source: str,
+    progress: ProgressCallback | None = None,
+) -> str:
+    destination = remote_media_destination(source)
+    if destination.exists() and destination.stat().st_size > 1_000_000:
+        emit_source_progress(progress, "download", 34, "Using cached open movie")
+        return str(destination.resolve())
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    partial = destination.with_suffix(destination.suffix + ".part")
+    emit_source_progress(progress, "download", 8, "Downloading open movie")
+    try:
+        with requests.get(
+            source,
+            stream=True,
+            allow_redirects=True,
+            timeout=(15, 90),
+        ) as response:
+            response.raise_for_status()
+            total = int(response.headers.get("Content-Length") or 0)
+            if total > MAX_REMOTE_MEDIA_BYTES:
+                raise RuntimeError("Open movie file is larger than the 8 GB download limit.")
+            downloaded = 0
+            with partial.open("wb") as output:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    output.write(chunk)
+                    downloaded += len(chunk)
+                    if downloaded > MAX_REMOTE_MEDIA_BYTES:
+                        raise RuntimeError("Open movie file exceeded the 8 GB download limit.")
+                    if total:
+                        ratio = min(1.0, downloaded / total)
+                        percent = 8 + int(ratio * 25)
+                        label = f"Downloading open movie {int(ratio * 100)}%"
+                    else:
+                        percent = min(32, 8 + downloaded // (25 * 1024 * 1024))
+                        label = f"Downloading open movie {downloaded // (1024 * 1024)} MB"
+                    emit_source_progress(progress, "download", percent, label)
+        if not partial.exists() or partial.stat().st_size < 1_000_000:
+            raise RuntimeError("The open movie download was empty or incomplete.")
+        partial.replace(destination)
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
+    emit_source_progress(progress, "download", 34, "Open movie download ready")
+    return str(destination.resolve())
 
 
 def download_youtube_source(

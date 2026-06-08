@@ -43,6 +43,17 @@ def test_find_sidecar_transcript_prefers_matching_srt(tmp_path: Path) -> None:
     assert load_transcript_file(srt)[0].text == "hello"
 
 
+def test_load_srt_accepts_two_digit_fractional_seconds(tmp_path: Path) -> None:
+    srt = tmp_path / "archive-captions.srt"
+    srt.write_text(
+        "1\n00:00:18,83 --> 00:00:25,24\nModern subtitle timing\n",
+        encoding="utf-8",
+    )
+    segment = load_transcript_file(srt)[0]
+    assert segment.start == 18.83
+    assert segment.end == 25.24
+
+
 def response(status: int, payload: dict) -> requests.Response:
     result = requests.Response()
     result.status_code = status

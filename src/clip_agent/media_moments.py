@@ -4,6 +4,7 @@ import math
 import re
 import subprocess
 from dataclasses import dataclass
+from typing import Callable
 
 from .ffmpeg import ffmpeg_bin
 from .models import ClipCandidate
@@ -20,6 +21,9 @@ class MediaPoint:
 AUDIO_FRAME_RE = re.compile(r"pts_time:(?P<time>\d+(?:\.\d+)?)")
 AUDIO_RMS_RE = re.compile(r"RMS_level=(?P<level>-?\d+(?:\.\d+)?|-inf)")
 SCENE_TIME_RE = re.compile(r"pts_time:(?P<time>\d+(?:\.\d+)?)")
+ScanProgress = Callable[[int, str], None]
+MAX_SCAN_WINDOWS = 8
+SCAN_WINDOW_SECONDS = 45.0
 
 
 def select_media_moment_candidates(
@@ -28,9 +32,11 @@ def select_media_moment_candidates(
     max_clips: int,
     clip_length: int,
     genre: str = "auto",
+    progress: ScanProgress | None = None,
 ) -> list[ClipCandidate]:
-    audio_levels = read_audio_levels(source)
-    scene_times = read_scene_times(source)
+    windows = analysis_windows(duration)
+    audio_levels = read_audio_levels(source, windows=windows, progress=progress)
+    scene_times = read_scene_times(source, windows=windows, progress=progress)
     candidates = media_candidates_from_features(
         audio_levels,
         scene_times,
@@ -42,41 +48,120 @@ def select_media_moment_candidates(
     return candidates or fallback_candidates(duration, max_clips, clip_length)
 
 
-def read_audio_levels(source: str) -> list[tuple[float, float]]:
-    command = [
-        ffmpeg_bin(),
-        "-hide_banner",
-        "-nostats",
-        "-i",
-        source,
-        "-vn",
-        "-af",
-        "asetnsamples=n=44100,astats=metadata=1:reset=1,"
-        "ametadata=print:key=lavfi.astats.Overall.RMS_level",
-        "-f",
-        "null",
-        "-",
+def analysis_windows(duration: float) -> list[tuple[float, float]]:
+    if duration <= 0:
+        return [(0.0, SCAN_WINDOW_SECONDS)]
+    if duration <= SCAN_WINDOW_SECONDS * MAX_SCAN_WINDOWS:
+        return [(0.0, duration)]
+    latest_start = max(0.0, duration - SCAN_WINDOW_SECONDS)
+    return [
+        (
+            round(latest_start * index / (MAX_SCAN_WINDOWS - 1), 2),
+            SCAN_WINDOW_SECONDS,
+        )
+        for index in range(MAX_SCAN_WINDOWS)
     ]
-    result = subprocess.run(command, check=False, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return parse_audio_levels(f"{result.stdout}\n{result.stderr}")
 
 
-def read_scene_times(source: str) -> list[float]:
-    command = [
-        ffmpeg_bin(),
-        "-hide_banner",
-        "-nostats",
-        "-i",
-        source,
-        "-vf",
-        "select='gt(scene,0.18)',showinfo",
-        "-an",
-        "-f",
-        "null",
-        "-",
-    ]
-    result = subprocess.run(command, check=False, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return parse_scene_times(f"{result.stdout}\n{result.stderr}")
+def read_audio_levels(
+    source: str,
+    windows: list[tuple[float, float]] | None = None,
+    progress: ScanProgress | None = None,
+) -> list[tuple[float, float]]:
+    windows = windows or [(0.0, SCAN_WINDOW_SECONDS)]
+    levels: list[tuple[float, float]] = []
+    for index, (start, length) in enumerate(windows, start=1):
+        if progress:
+            progress(
+                50 + int(index / len(windows) * 3),
+                f"Scanning audio peaks {index}/{len(windows)}",
+            )
+        command = [
+            ffmpeg_bin(),
+            "-hide_banner",
+            "-nostats",
+            "-ss",
+            str(start),
+            "-t",
+            str(length),
+            "-i",
+            source,
+            "-vn",
+            "-af",
+            "asetnsamples=n=44100,astats=metadata=1:reset=1,"
+            "ametadata=print:key=lavfi.astats.Overall.RMS_level",
+            "-f",
+            "null",
+            "-",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            continue
+        output = f"{result.stdout}\n{result.stderr}"
+        levels.extend(
+            (start + time, level)
+            for time, level in parse_audio_levels(output)
+        )
+    return levels
+
+
+def read_scene_times(
+    source: str,
+    windows: list[tuple[float, float]] | None = None,
+    progress: ScanProgress | None = None,
+) -> list[float]:
+    windows = windows or [(0.0, SCAN_WINDOW_SECONDS)]
+    times: list[float] = []
+    for index, (start, length) in enumerate(windows, start=1):
+        if progress:
+            progress(
+                53 + int(index / len(windows) * 2),
+                f"Scanning visual changes {index}/{len(windows)}",
+            )
+        command = [
+            ffmpeg_bin(),
+            "-hide_banner",
+            "-nostats",
+            "-ss",
+            str(start),
+            "-t",
+            str(length),
+            "-i",
+            source,
+            "-vf",
+            "select='gt(scene,0.18)',showinfo",
+            "-an",
+            "-f",
+            "null",
+            "-",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            continue
+        output = f"{result.stdout}\n{result.stderr}"
+        times.extend(
+            start + time
+            for time in parse_scene_times(output)
+        )
+    return sorted(set(round(time, 2) for time in times))
 
 
 def parse_audio_levels(output: str) -> list[tuple[float, float]]:

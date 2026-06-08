@@ -14,8 +14,10 @@ from .paths import CACHE_ROOT
 ARCHIVE_SEARCH_URL = "https://archive.org/advancedsearch.php"
 ARCHIVE_METADATA_URL = "https://archive.org/metadata"
 ARCHIVE_DOWNLOAD_URL = "https://archive.org/download"
-PUBLIC_DOMAIN_QUERY = (
-    'mediatype:movies AND collection:feature_films AND licenseurl:*publicdomain* '
+OPEN_LICENSE_QUERY = (
+    "mediatype:movies AND "
+    "(licenseurl:*publicdomain* OR licenseurl:*creativecommons.org/licenses/by/* "
+    "OR licenseurl:*creativecommons.org/licenses/by-sa/*) "
     'AND (format:"h.264" OR format:"512Kb MPEG4")'
 )
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._-]{1,160}$")
@@ -39,11 +41,16 @@ def safe_search_terms(value: str) -> str:
     return re.sub(r"\s+", " ", clean).strip()[:80]
 
 
-def public_domain_license(value: Any) -> str:
+def open_media_license(value: Any) -> str:
     values = value if isinstance(value, list) else [value]
     for item in values:
         license_url = str(item or "")
-        if "publicdomain" in license_url.lower():
+        lowered = license_url.lower()
+        if (
+            "publicdomain" in lowered
+            or "creativecommons.org/licenses/by/" in lowered
+            or "creativecommons.org/licenses/by-sa/" in lowered
+        ):
             return license_url
     return ""
 
@@ -63,13 +70,77 @@ def archive_download_url(identifier: str, filename: str) -> str:
     )
 
 
+FEATURED_OPEN_MOVIES = (
+    {
+        "identifier": "charge-blender-open-movie-1608p",
+        "title": "Charge: Blender Open Movie",
+        "description": "A colorful 2022 sci-fi action short produced by Blender Studio.",
+        "year": "2022",
+        "downloads": 0,
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "thumbnail_url": (
+            "https://studio.blender.org/files/public/thumbnail/ae/13/"
+            "ae134adfbfa91160947451873ab09c6d_m.webp"
+        ),
+        "details_url": archive_details_url("charge-blender-open-movie-1608p"),
+        "official_url": "https://studio.blender.org/projects/charge/",
+        "provider": "Blender Studio / Internet Archive",
+        "featured": True,
+    },
+    {
+        "identifier": "sprite-fright",
+        "title": "Sprite Fright",
+        "description": "A modern, full-color animated horror comedy released by Blender Studio in 2021.",
+        "year": "2021",
+        "downloads": 0,
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "thumbnail_url": (
+            "https://studio.blender.org/files/public/thumbnail/ce/83/"
+            "ce833b1d7d5862f1c6e64f7d5b8b0fc9_m.webp"
+        ),
+        "details_url": archive_details_url("sprite-fright"),
+        "official_url": "https://studio.blender.org/projects/sprite-fright/",
+        "provider": "Blender Studio / Internet Archive",
+        "featured": True,
+    },
+    {
+        "identifier": "hero_20260106",
+        "title": "Hero",
+        "description": "A vivid 2D and 3D animated open movie created with Blender Grease Pencil.",
+        "year": "2018",
+        "downloads": 0,
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "thumbnail_url": (
+            "https://studio.blender.org/files/public/thumbnail/d7/ee/"
+            "d7ee634f13f6adacfaaf8e1017148bdc_m.webp"
+        ),
+        "details_url": archive_details_url("hero_20260106"),
+        "official_url": "https://studio.blender.org/projects/hero/",
+        "provider": "Blender Studio / Internet Archive",
+        "featured": True,
+    },
+)
+FEATURED_BY_IDENTIFIER = {
+    movie["identifier"]: movie
+    for movie in FEATURED_OPEN_MOVIES
+}
+
+
 def search_public_domain_movies(
     query: str = "",
     page: int = 1,
     rows: int = 12,
 ) -> dict[str, Any]:
-    terms = safe_search_terms(query) or "charlie chaplin"
-    search_query = f"{PUBLIC_DOMAIN_QUERY} AND (title:({terms}) OR description:({terms}))"
+    terms = safe_search_terms(query)
+    if not terms:
+        return {
+            "query": "",
+            "page": 1,
+            "total": len(FEATURED_OPEN_MOVIES),
+            "movies": [dict(movie) for movie in FEATURED_OPEN_MOVIES],
+            "featured": True,
+        }
+    search_query = f"{OPEN_LICENSE_QUERY} AND (title:({terms}) OR description:({terms}))"
     response = requests.get(
         ARCHIVE_SEARCH_URL,
         params={
@@ -94,7 +165,7 @@ def search_public_domain_movies(
     movies: list[dict[str, Any]] = []
     for document in payload.get("docs") or []:
         identifier = str(document.get("identifier") or "")
-        license_url = public_domain_license(document.get("licenseurl"))
+        license_url = open_media_license(document.get("licenseurl"))
         if not IDENTIFIER_RE.fullmatch(identifier) or not license_url:
             continue
         movies.append(
@@ -108,6 +179,7 @@ def search_public_domain_movies(
                 "thumbnail_url": archive_thumbnail_url(identifier),
                 "details_url": archive_details_url(identifier),
                 "provider": "Internet Archive",
+                "featured": False,
             }
         )
     return {
@@ -197,10 +269,13 @@ def resolve_public_domain_movie(identifier: str) -> dict[str, Any]:
     response.raise_for_status()
     payload = response.json()
     metadata = payload.get("metadata") or {}
-    license_url = public_domain_license(metadata.get("licenseurl"))
+    featured = FEATURED_BY_IDENTIFIER.get(identifier)
+    license_url = open_media_license(metadata.get("licenseurl"))
+    if not license_url and featured:
+        license_url = str(featured["license_url"])
     if metadata.get("mediatype") != "movies" or not license_url:
         raise PublicMovieError(
-            "This item is not marked as a public-domain movie by Internet Archive."
+            "This item is not marked with a supported open-media license."
         )
 
     movie_file = choose_movie_file(payload.get("files") or [])
@@ -223,12 +298,18 @@ def resolve_public_domain_movie(identifier: str) -> dict[str, Any]:
         "year": clean_catalog_text(metadata.get("year") or metadata.get("date"), 12),
         "license_url": license_url,
         "rights": clean_catalog_text(metadata.get("rights"), 240),
-        "thumbnail_url": archive_thumbnail_url(identifier),
+        "thumbnail_url": (
+            str(featured["thumbnail_url"])
+            if featured
+            else archive_thumbnail_url(identifier)
+        ),
         "details_url": archive_details_url(identifier),
+        "official_url": str(featured.get("official_url") or "") if featured else "",
         "source_url": archive_download_url(identifier, filename),
         "filename": filename,
         "file_size": file_size(movie_file),
         "transcript_path": transcript_path,
         "transcript_error": transcript_error,
         "provider": "Internet Archive",
+        "featured": bool(featured),
     }

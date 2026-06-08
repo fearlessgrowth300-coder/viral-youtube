@@ -1,4 +1,9 @@
-from clip_agent.media_moments import media_candidates_from_features, parse_audio_levels, parse_scene_times
+from clip_agent.media_moments import (
+    analysis_windows,
+    media_candidates_from_features,
+    parse_audio_levels,
+    parse_scene_times,
+)
 
 
 def test_parse_audio_levels_from_ffmpeg_metadata() -> None:
@@ -29,3 +34,10 @@ def test_media_candidates_pick_audio_peak_instead_of_intro() -> None:
     assert len(clips) == 1
     assert clips[0].start > 60
     assert "Media score" in clips[0].reason
+
+
+def test_analysis_windows_sample_long_movie_across_duration() -> None:
+    windows = analysis_windows(7200)
+    assert len(windows) == 8
+    assert windows[0] == (0.0, 45.0)
+    assert windows[-1] == (7155.0, 45.0)

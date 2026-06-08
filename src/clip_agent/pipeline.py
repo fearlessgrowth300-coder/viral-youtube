@@ -192,6 +192,12 @@ def run_once(
             options.max_clips,
             options.clip_length_seconds,
             genre=options.genre,
+            progress=lambda percent, message: emit_progress(
+                progress,
+                "select",
+                percent,
+                message,
+            ),
         )
         emit_progress(progress, "select", 56, "Selected high-energy moments")
     candidates = [

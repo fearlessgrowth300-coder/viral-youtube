@@ -19,8 +19,8 @@ from .source import extract_youtube_id, is_youtube_live_url, is_youtube_url
 
 SRT_BLOCK_RE = re.compile(
     r"\d+\s+"
-    r"(?P<start>\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+"
-    r"(?P<end>\d{2}:\d{2}:\d{2},\d{3})\s+"
+    r"(?P<start>\d{2}:\d{2}:\d{2},\d{1,3})\s+-->\s+"
+    r"(?P<end>\d{2}:\d{2}:\d{2},\d{1,3})\s+"
     r"(?P<text>.*?)(?=\n\s*\n|\Z)",
     re.DOTALL,
 )
@@ -120,11 +120,12 @@ def write_transcript_cache(
 def parse_srt_time(value: str) -> float:
     hours, minutes, rest = value.split(":")
     seconds, millis = rest.split(",")
+    normalized_millis = millis.ljust(3, "0")[:3]
     return (
         int(hours) * 3600
         + int(minutes) * 60
         + int(seconds)
-        + int(millis) / 1000
+        + int(normalized_millis) / 1000
     )
 
 
