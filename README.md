@@ -9,6 +9,7 @@ This is a local starter agent for clipping videos you own or have permission to 
 - score funny, surprising, high-energy, or useful moments
 - render vertical clips with bold burned-in captions, timed cutaway B-roll, and visual polish
 - generate a 1280x720 viral thumbnail for one-minute and long videos using the selected payoff frame and OpenAI hook
+- browse Internet Archive movies explicitly marked public domain and use their MP4/subtitle files as clip sources
 - generate local movie-recap narration with Piper, with Windows and OpenAI voice fallbacks
 - score titles, descriptions, tags, and pinned questions with a TubeBuddy/vidIQ-style SEO checklist
 - write a posting review queue for YouTube, TikTok, and Instagram
@@ -77,6 +78,8 @@ Use `Settings` to store TranscriptAPI, OpenAI, YouTube, TikTok, and Instagram cr
 When configured, TranscriptAPI is used as a YouTube transcript fallback before audio transcription. Exhausted credits, invalid keys, and rate limits are shown as clear job errors so the key can be replaced in Settings.
 
 Pasting a YouTube link starts transcript analysis before rendering. The dashboard shows the top ranked timestamps, hooks, titles, descriptions, and tags. That transcript and OpenAI analysis are cached under the ignored `.cache` directory and reused when the clipping job starts.
+
+Use `Browse public-domain movies` to search Internet Archive's public-domain feature-film catalog. Selecting a title fills the direct MP4 source and downloads an available `.srt` or `.vtt` subtitle into the local cache for transcript-based viral moment selection. Always review the linked Archive.org item page and rights record before publishing.
 
 ## Production Website
 

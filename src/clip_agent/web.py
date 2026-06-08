@@ -21,6 +21,7 @@ from .ai_select import analyze_transcript_for_viral_moments
 from .config import AgentConfig, get_or_create_settings_pin, save_local_settings
 from .pipeline import RunOptions, run_once
 from .paths import CACHE_ROOT, DATA_ROOT, PROJECT_ROOT, RUNS_ROOT, ensure_data_directories
+from .public_movies import resolve_public_domain_movie, search_public_domain_movies
 from .publishers.dispatcher import publish_queue
 from .source import analyze_source, is_blocking_youtube_error, is_youtube_url
 from .transcribe import (
@@ -913,6 +914,26 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                         self,
                         {"analysis": analyze_source_content(source, self.app_state.config)},
                     )
+            elif path == "/api/public-movies":
+                params = parse_qs(parsed.query)
+                write_json(
+                    self,
+                    search_public_domain_movies(
+                        params.get("query", [""])[0],
+                        safe_int(params.get("page", ["1"])[0], 1, 1, 100),
+                    ),
+                )
+            elif path == "/api/public-movies/resolve":
+                params = parse_qs(parsed.query)
+                identifier = params.get("identifier", [""])[0].strip()
+                if not identifier:
+                    write_json(
+                        self,
+                        {"error": "Movie identifier is required."},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                else:
+                    write_json(self, {"movie": resolve_public_domain_movie(identifier)})
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
         except PermissionError as exc:

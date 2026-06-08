@@ -10,7 +10,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/assets/icon.svg">
     <title>Clipper Agent</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=7">
+    <link rel="stylesheet" href="/assets/styles.css?v=8">
   </head>
   <body>
     <main class="shell">
@@ -41,6 +41,17 @@
             <span>Source URL or file path</span>
             <input id="sourceInput" name="source" placeholder="C:\path\video.mp4 or authorized stream URL">
           </label>
+          <button class="secondary movie-library-button" type="button" id="movieLibraryButton">
+            Browse public-domain movies
+          </button>
+          <section class="selected-movie" id="selectedMovie" hidden>
+            <img id="selectedMovieThumb" alt="">
+            <div>
+              <strong id="selectedMovieTitle"></strong>
+              <p id="selectedMovieMeta"></p>
+              <a id="selectedMovieDetails" target="_blank" rel="noreferrer">View rights and source</a>
+            </div>
+          </section>
 
           <section class="source-analysis" id="sourceAnalysis" hidden>
             <div class="source-summary">
@@ -414,6 +425,31 @@
       </section>
     </div>
 
+    <div class="modal-backdrop" id="movieLibraryModal" hidden>
+      <section class="movie-library-modal" role="dialog" aria-modal="true" aria-labelledby="movieLibraryTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Internet Archive</p>
+            <h2 id="movieLibraryTitle">Public-domain movie library</h2>
+          </div>
+          <button class="icon-button" type="button" id="movieLibraryClose" aria-label="Close">X</button>
+        </div>
+        <form class="movie-search" id="movieSearchForm">
+          <label>
+            <span>Search movies</span>
+            <input id="movieSearchInput" placeholder="Charlie Chaplin, horror, comedy...">
+          </label>
+          <button class="primary" type="submit">Search</button>
+        </form>
+        <p class="movie-library-note">
+          Results are restricted to Internet Archive items marked with a public-domain license and an MP4 file.
+          Check the source page before publishing.
+        </p>
+        <p class="movie-library-status" id="movieLibraryStatus"></p>
+        <div class="movie-grid" id="movieGrid"></div>
+      </section>
+    </div>
+
     <div class="modal-backdrop" id="settingsModal" hidden>
       <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
         <div class="modal-head">
@@ -473,6 +509,6 @@
       </section>
     </div>
 
-    <script src="/assets/app.js?v=8" defer></script>
+    <script src="/assets/app.js?v=9" defer></script>
   </body>
 </html>

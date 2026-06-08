@@ -59,6 +59,18 @@ const shortModeFields = document.querySelector("#shortModeFields");
 const longModeFields = document.querySelector("#longModeFields");
 const longDurationInput = document.querySelector("#longDurationInput");
 const horizontalInput = document.querySelector("#horizontalInput");
+const movieLibraryButton = document.querySelector("#movieLibraryButton");
+const movieLibraryModal = document.querySelector("#movieLibraryModal");
+const movieLibraryClose = document.querySelector("#movieLibraryClose");
+const movieSearchForm = document.querySelector("#movieSearchForm");
+const movieSearchInput = document.querySelector("#movieSearchInput");
+const movieLibraryStatus = document.querySelector("#movieLibraryStatus");
+const movieGrid = document.querySelector("#movieGrid");
+const selectedMovie = document.querySelector("#selectedMovie");
+const selectedMovieThumb = document.querySelector("#selectedMovieThumb");
+const selectedMovieTitle = document.querySelector("#selectedMovieTitle");
+const selectedMovieMeta = document.querySelector("#selectedMovieMeta");
+const selectedMovieDetails = document.querySelector("#selectedMovieDetails");
 let analyzeTimer = null;
 let sourceAnalysisRequestId = 0;
 let lastCredentialAlert = "";
@@ -94,6 +106,99 @@ function selectedCaptionStyle() {
 
 function selectedGenerationMode() {
   return document.querySelector('input[name="generationMode"]:checked')?.value || "short";
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0;
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function closeMovieLibrary() {
+  movieLibraryModal.hidden = true;
+}
+
+function renderMovieLibrary(movies) {
+  if (!movies.length) {
+    movieGrid.replaceChildren();
+    movieLibraryStatus.textContent = "No public-domain movies matched that search.";
+    return;
+  }
+  movieLibraryStatus.textContent = `${movies.length} public-domain result(s)`;
+  const cards = movies.map((movie) => {
+    const card = document.createElement("article");
+    card.className = "movie-card";
+    const image = document.createElement("img");
+    image.src = movie.thumbnail_url;
+    image.alt = "";
+    image.loading = "lazy";
+    const body = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = movie.title;
+    const meta = document.createElement("p");
+    meta.className = "movie-meta";
+    meta.textContent = [movie.year, `${Number(movie.downloads || 0).toLocaleString()} views`]
+      .filter(Boolean)
+      .join(" | ");
+    const description = document.createElement("p");
+    description.textContent = movie.description || "Public-domain movie from Internet Archive.";
+    const actions = document.createElement("div");
+    actions.className = "movie-actions";
+    const details = document.createElement("a");
+    details.className = "secondary compact";
+    details.href = movie.details_url;
+    details.target = "_blank";
+    details.rel = "noreferrer";
+    details.textContent = "Preview";
+    const use = document.createElement("button");
+    use.className = "primary compact";
+    use.type = "button";
+    use.textContent = "Use movie";
+    use.addEventListener("click", () => {
+      selectPublicMovie(movie).catch((error) => {
+        movieLibraryStatus.textContent = error.message;
+      });
+    });
+    actions.append(details, use);
+    body.append(title, meta, description, actions);
+    card.append(image, body);
+    return card;
+  });
+  movieGrid.replaceChildren(...cards);
+}
+
+async function searchPublicMovies() {
+  movieLibraryStatus.textContent = "Searching public-domain movies...";
+  movieGrid.replaceChildren();
+  const payload = await api(`/api/public-movies?query=${encodeURIComponent(movieSearchInput.value.trim())}`);
+  renderMovieLibrary(payload.movies || []);
+}
+
+async function selectPublicMovie(movieSummary) {
+  movieLibraryStatus.textContent = `Preparing ${movieSummary.title}...`;
+  const payload = await api(
+    `/api/public-movies/resolve?identifier=${encodeURIComponent(movieSummary.identifier)}`
+  );
+  const movie = payload.movie;
+  sourceInput.value = movie.source_url;
+  document.querySelector("#transcriptInput").value = movie.transcript_path || "";
+  selectedMovieThumb.src = movie.thumbnail_url;
+  selectedMovieTitle.textContent = movie.title;
+  selectedMovieMeta.textContent = [
+    movie.year,
+    "Public domain",
+    formatBytes(movie.file_size),
+    movie.transcript_path ? "Subtitles ready" : "No subtitles"
+  ].filter(Boolean).join(" | ");
+  selectedMovieDetails.href = movie.details_url;
+  selectedMovie.hidden = false;
+  sourceAnalysis.hidden = true;
+  closeMovieLibrary();
 }
 
 function syncGenerationMode() {
@@ -341,6 +446,7 @@ function scheduleSourceAnalysis() {
   clearTimeout(analyzeTimer);
   sourceAnalysisRequestId += 1;
   const sourceValue = sourceInput.value.trim();
+  selectedMovie.hidden = true;
   if (!sourceValue || !isYouTubeSource(sourceValue)) {
     sourceAnalysis.hidden = true;
     sourceViralAnalysis.hidden = true;
@@ -841,6 +947,27 @@ settingsModal.addEventListener("click", (event) => {
   }
 });
 
+movieLibraryButton.addEventListener("click", () => {
+  movieLibraryModal.hidden = false;
+  if (!movieGrid.children.length) {
+    searchPublicMovies().catch((error) => {
+      movieLibraryStatus.textContent = error.message;
+    });
+  }
+});
+movieLibraryClose.addEventListener("click", closeMovieLibrary);
+movieLibraryModal.addEventListener("click", (event) => {
+  if (event.target === movieLibraryModal) {
+    closeMovieLibrary();
+  }
+});
+movieSearchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  searchPublicMovies().catch((error) => {
+    movieLibraryStatus.textContent = error.message;
+  });
+});
+
 manualUploadClose.addEventListener("click", closeManualUpload);
 manualUploadModal.addEventListener("click", (event) => {
   if (event.target === manualUploadModal) {
@@ -853,6 +980,9 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && !settingsModal.hidden) {
     closeSettings();
+  }
+  if (event.key === "Escape" && !movieLibraryModal.hidden) {
+    closeMovieLibrary();
   }
 });
 document.querySelectorAll("[data-copy-target]").forEach((button) => {
