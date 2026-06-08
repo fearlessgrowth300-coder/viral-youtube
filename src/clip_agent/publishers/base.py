@@ -16,6 +16,7 @@ class PublishMetadata:
     description: str
     tags: list[str]
     has_ai_voiceover: bool = False
+    thumbnail_path: str = ""
 
 
 @dataclass(frozen=True)

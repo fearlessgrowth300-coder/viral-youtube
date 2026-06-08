@@ -12,6 +12,7 @@ from .config import AgentConfig
 from .ffmpeg import escape_filter_path, ffmpeg_bin
 from .models import ClipCandidate, RenderedClip, TranscriptSegment
 from .scoring import build_hook, is_generic_hook
+from .thumbnail import generate_viral_thumbnail, thumbnail_headline
 from .voiceover import PIPER_ATTRIBUTION, generate_voiceover_with_provider
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -358,6 +359,7 @@ def render_clip(
     polish: bool = True,
     voice_provider: str = "local-piper",
     narration_style: str = "movie-recap",
+    generate_thumbnail: bool = False,
     progress: ProgressCallback | None = None,
     progress_start: int = 0,
     progress_end: int = 100,
@@ -368,6 +370,7 @@ def render_clip(
     srt_path = output_dir / f"{stem}.srt"
     metadata_path = output_dir / f"{stem}.json"
     video_path = output_dir / f"{stem}.mp4"
+    thumbnail_path = output_dir / f"{stem}-thumbnail.jpg"
     voiceover_path = output_dir / f"{stem}-voiceover.mp3"
 
     write_srt(srt_path, candidate, transcript_segments)
@@ -473,10 +476,29 @@ def render_clip(
             video_path.unlink()
         raise
 
+    generated_thumbnail: Path | None = None
+    thumbnail_error = ""
+    if generate_thumbnail:
+        if progress:
+            progress(
+                {
+                    "phase": "thumbnail",
+                    "progress": max(progress_start, progress_end - 1),
+                    "message": "Generating viral thumbnail",
+                }
+            )
+        try:
+            generated_thumbnail = generate_viral_thumbnail(source, candidate, thumbnail_path)
+        except Exception as exc:
+            thumbnail_error = str(exc)
+
     metadata = {
         "candidate": asdict(candidate),
         "video_path": str(video_path),
         "srt_path": str(srt_path),
+        "thumbnail_path": str(generated_thumbnail) if generated_thumbnail else "",
+        "thumbnail_text": thumbnail_headline(candidate) if generated_thumbnail else "",
+        "thumbnail_error": thumbnail_error,
         "has_ai_voiceover": has_ai_voiceover,
         "caption_style": caption_style,
         "render_quality": render_quality,
@@ -500,6 +522,8 @@ def render_clip(
         srt_path=srt_path,
         metadata_path=metadata_path,
         candidate=candidate,
+        thumbnail_path=generated_thumbnail,
+        thumbnail_text=thumbnail_headline(candidate) if generated_thumbnail else "",
         has_ai_voiceover=has_ai_voiceover,
         voiceover_provider=used_voiceover_provider,
         broll_applied=bool(enable_broll and broll_enable_expression(clip_duration)),

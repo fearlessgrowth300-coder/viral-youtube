@@ -37,6 +37,8 @@ class RenderedClip:
     srt_path: Path
     metadata_path: Path
     candidate: ClipCandidate
+    thumbnail_path: Path | None = None
+    thumbnail_text: str = ""
     has_ai_voiceover: bool = False
     voiceover_provider: str = ""
     broll_applied: bool = False
@@ -60,6 +62,8 @@ class PipelineResult:
                     "video_path": str(clip.video_path),
                     "srt_path": str(clip.srt_path),
                     "metadata_path": str(clip.metadata_path),
+                    "thumbnail_path": str(clip.thumbnail_path) if clip.thumbnail_path else "",
+                    "thumbnail_text": clip.thumbnail_text,
                     "candidate": asdict(clip.candidate),
                     "has_ai_voiceover": clip.has_ai_voiceover,
                     "voiceover_provider": clip.voiceover_provider,

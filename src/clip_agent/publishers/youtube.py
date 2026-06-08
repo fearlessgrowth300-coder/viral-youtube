@@ -60,9 +60,25 @@ class YouTubePublisher(Publisher):
         )
         response = request.execute()
         video_id = response.get("id")
+        thumbnail_message = ""
+        thumbnail_path = Path(metadata.thumbnail_path) if metadata.thumbnail_path else None
+        if video_id and thumbnail_path and thumbnail_path.exists():
+            try:
+                service.thumbnails().set(
+                    videoId=video_id,
+                    media_body=MediaFileUpload(
+                        str(thumbnail_path),
+                        mimetype="image/jpeg",
+                        resumable=False,
+                    ),
+                ).execute()
+                thumbnail_message = "Custom thumbnail uploaded."
+            except Exception as exc:
+                thumbnail_message = f"Video published, but YouTube rejected the custom thumbnail: {exc}"
         return PublishResult(
             platform=self.platform,
             status="published",
             url=f"https://www.youtube.com/watch?v={video_id}" if video_id else None,
             external_id=video_id,
+            message=thumbnail_message,
         )

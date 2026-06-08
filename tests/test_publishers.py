@@ -48,12 +48,14 @@ def test_append_publish_queue(tmp_path: Path) -> None:
         srt_path=tmp_path / "clip.srt",
         metadata_path=tmp_path / "clip.json",
         candidate=candidate,
+        thumbnail_path=tmp_path / "clip-thumbnail.jpg",
     )
     queue = tmp_path / "publish_queue.jsonl"
     append_publish_queue(queue, [clip], ["youtube", "tiktok"])
     text = queue.read_text(encoding="utf-8")
     assert '"platform": "youtube"' in text
     assert '"platform": "tiktok"' in text
+    assert '"thumbnail_path":' in text
 
 
 def test_append_publish_queue_skips_empty_clip_list(tmp_path: Path) -> None:

@@ -241,6 +241,11 @@ def run_once(
                     polish=options.polish,
                     voice_provider=options.voice_provider,
                     narration_style=options.narration_style,
+                    generate_thumbnail=(
+                        options.generation_mode == "long"
+                        or options.clip_length_seconds >= 60
+                        or candidate.end - candidate.start >= 55
+                    ),
                     progress=progress,
                     progress_start=render_start,
                     progress_end=render_end,
@@ -270,6 +275,7 @@ def run_once(
         "seo_optimizer": options.seo_optimize,
         "voice_provider": options.voice_provider if options.enable_voiceover else "",
         "narration_style": options.narration_style if options.enable_voiceover else "",
+        "viral_thumbnail": options.generation_mode == "long" or options.clip_length_seconds >= 60,
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     append_publish_queue(run_dir / "publish_queue.jsonl", result.clips, list(options.platforms))

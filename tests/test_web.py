@@ -232,8 +232,9 @@ def test_delete_clip_updates_manifest_and_queue() -> None:
     video = clips_dir / "000001-test.mp4"
     srt = clips_dir / "000001-test.srt"
     metadata = clips_dir / "000001-test.json"
+    thumbnail = clips_dir / "000001-test-thumbnail.jpg"
     voiceover = clips_dir / "000001-test-voiceover.wav"
-    for path in (video, srt, metadata, voiceover):
+    for path in (video, srt, metadata, thumbnail, voiceover):
         path.write_text("x", encoding="utf-8")
     manifest = {
         "run_dir": str(run_dir),
@@ -243,6 +244,7 @@ def test_delete_clip_updates_manifest_and_queue() -> None:
                 "video_path": str(video),
                 "srt_path": str(srt),
                 "metadata_path": str(metadata),
+                "thumbnail_path": str(thumbnail),
                 "candidate": {"title": "Test"},
             }
         ],
@@ -259,6 +261,7 @@ def test_delete_clip_updates_manifest_and_queue() -> None:
         assert not video.exists()
         assert not srt.exists()
         assert not metadata.exists()
+        assert not thumbnail.exists()
         assert not voiceover.exists()
         updated = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
         assert updated["clips"] == []

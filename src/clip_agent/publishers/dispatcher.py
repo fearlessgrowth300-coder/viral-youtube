@@ -30,6 +30,7 @@ def metadata_for_clip(clip: RenderedClip) -> PublishMetadata:
         description=f"{clip.candidate.hook or clip.candidate.caption}\n\n{description}\n\n{hashtags}{disclosure}",
         tags=tags,
         has_ai_voiceover=clip.has_ai_voiceover,
+        thumbnail_path=str(clip.thumbnail_path) if clip.thumbnail_path else "",
     )
 
 

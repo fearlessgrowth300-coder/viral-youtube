@@ -536,11 +536,12 @@ def delete_clip(raw_video_path: str, raw_run_dir: str | None = None) -> dict[str
         video_path,
         video_path.with_suffix(".srt"),
         video_path.with_suffix(".json"),
+        video_path.with_name(f"{video_path.stem}-thumbnail.jpg"),
         video_path.with_name(f"{video_path.stem}-voiceover.mp3"),
         video_path.with_name(f"{video_path.stem}-voiceover.wav"),
     }
     for clip in removed_clips:
-        for key in ("video_path", "srt_path", "metadata_path"):
+        for key in ("video_path", "srt_path", "metadata_path", "thumbnail_path"):
             value = clip.get(key)
             if value:
                 delete_candidates.add(resolve_runs_path(str(value)))
@@ -609,6 +610,7 @@ def list_runs() -> list[dict[str, Any]]:
             video_path = clip.get("video_path", "")
             srt_path = clip.get("srt_path", "")
             metadata_path = clip.get("metadata_path", "")
+            thumbnail_path = clip.get("thumbnail_path", "")
             candidate = clip.get("candidate", {})
             clips.append(
                 {
@@ -617,6 +619,7 @@ def list_runs() -> list[dict[str, Any]]:
                     "video_url": media_url(video_path),
                     "srt_url": media_url(srt_path) if srt_path else "",
                     "metadata_url": media_url(metadata_path) if metadata_path else "",
+                    "thumbnail_url": media_url(thumbnail_path) if thumbnail_path else "",
                 }
             )
         queue_path = run_dir / "publish_queue.jsonl"

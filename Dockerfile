@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=10000
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libgomp1 \
+    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg fonts-dejavu-core libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -39,6 +39,9 @@ const manualUploadTags = document.querySelector("#manualUploadTags");
 const manualUploadComment = document.querySelector("#manualUploadComment");
 const manualUploadOpenClip = document.querySelector("#manualUploadOpenClip");
 const manualUploadDownload = document.querySelector("#manualUploadDownload");
+const manualThumbnailField = document.querySelector("#manualThumbnailField");
+const manualUploadThumbnail = document.querySelector("#manualUploadThumbnail");
+const manualUploadThumbnailDownload = document.querySelector("#manualUploadThumbnailDownload");
 const settingsModal = document.querySelector("#settingsModal");
 const settingsClose = document.querySelector("#settingsClose");
 const settingsStatus = document.querySelector("#settingsStatus");
@@ -486,7 +489,8 @@ function runsSignature(runs) {
       clips: run.clips.map((clip) => ({
         video_path: clip.video_path,
         title: clip.title,
-        reason: clip.candidate?.reason || ""
+        reason: clip.candidate?.reason || "",
+        thumbnail_path: clip.thumbnail_path || ""
       }))
     }))
   );
@@ -536,6 +540,15 @@ function renderRuns(runs) {
       video.src = clip.video_url;
       video.dataset.src = clip.video_url;
       video.preload = "metadata";
+      const thumbnailWrap = clipNode.querySelector('[data-field="thumbnail-wrap"]');
+      const thumbnailImage = clipNode.querySelector('[data-field="thumbnail"]');
+      const thumbnailDownload = clipNode.querySelector('[data-field="thumbnail-download"]');
+      if (clip.thumbnail_url) {
+        thumbnailImage.src = clip.thumbnail_url;
+        thumbnailWrap.hidden = false;
+        thumbnailDownload.href = clip.thumbnail_url;
+        thumbnailDownload.hidden = false;
+      }
       clipNode.querySelector("h4").textContent = cleanDisplayText(clip.title);
       clipNode.querySelector("p").textContent = cleanDisplayText(clip.candidate?.description || clip.candidate?.reason || "");
       const link = clipNode.querySelector("a");
@@ -785,6 +798,15 @@ function openManualUpload(clip) {
   manualUploadOpenClip.href = clip.video_url;
   manualUploadDownload.href = clip.video_url;
   manualUploadDownload.setAttribute("download", "");
+  if (clip.thumbnail_url) {
+    manualUploadThumbnail.src = clip.thumbnail_url;
+    manualUploadThumbnailDownload.href = clip.thumbnail_url;
+    manualThumbnailField.hidden = false;
+  } else {
+    manualUploadThumbnail.removeAttribute("src");
+    manualUploadThumbnailDownload.removeAttribute("href");
+    manualThumbnailField.hidden = true;
+  }
   manualUploadModal.hidden = false;
   window.open("https://studio.youtube.com", "_blank", "noopener,noreferrer");
 }

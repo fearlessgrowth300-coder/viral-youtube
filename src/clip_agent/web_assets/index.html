@@ -10,7 +10,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/assets/icon.svg">
     <title>Clipper Agent</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=6">
+    <link rel="stylesheet" href="/assets/styles.css?v=7">
   </head>
   <body>
     <main class="shell">
@@ -102,7 +102,7 @@
               <button type="button" data-duration-minutes="10">10 min</button>
               <button type="button" data-duration-minutes="20">20 min</button>
             </div>
-            <p>Long videos render as one horizontal highlight from the strongest continuous section.</p>
+            <p>Long videos render as one horizontal highlight and include a downloadable 16:9 viral thumbnail.</p>
           </section>
 
           <div class="grid-two">
@@ -330,6 +330,10 @@
     <template id="clipTemplate">
       <article class="clip-card">
         <video controls muted playsinline preload="metadata"></video>
+        <figure class="clip-thumbnail" data-field="thumbnail-wrap" hidden>
+          <img data-field="thumbnail" alt="Generated video thumbnail">
+          <figcaption>Generated 16:9 thumbnail</figcaption>
+        </figure>
         <div>
           <h4></h4>
           <p></p>
@@ -338,6 +342,7 @@
             <a target="_blank" rel="noreferrer">Open clip</a>
             <a target="_blank" rel="noreferrer" data-field="download">Download</a>
             <a target="_blank" rel="noreferrer" data-field="metadata">Metadata</a>
+            <a target="_blank" rel="noreferrer" data-field="thumbnail-download" download hidden>Thumbnail</a>
             <button class="secondary compact" type="button" data-action="manual-upload">Manual upload</button>
             <button class="text-danger" type="button" data-action="delete-clip">Delete clip</button>
           </div>
@@ -393,6 +398,12 @@
             <input id="manualUploadComment" readonly>
             <button class="secondary" type="button" data-copy-target="manualUploadComment">Copy</button>
           </div>
+        </div>
+
+        <div class="upload-field manual-thumbnail" id="manualThumbnailField" hidden>
+          <label>Generated thumbnail</label>
+          <img id="manualUploadThumbnail" alt="Generated YouTube thumbnail">
+          <a class="secondary" id="manualUploadThumbnailDownload" target="_blank" rel="noreferrer" download>Download thumbnail</a>
         </div>
 
         <div class="manual-actions">
@@ -462,6 +473,6 @@
       </section>
     </div>
 
-    <script src="/assets/app.js?v=7" defer></script>
+    <script src="/assets/app.js?v=8" defer></script>
   </body>
 </html>

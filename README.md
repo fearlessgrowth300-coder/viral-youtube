@@ -8,6 +8,7 @@ This is a local starter agent for clipping videos you own or have permission to 
 - transcribe with OpenAI when an API key is configured
 - score funny, surprising, high-energy, or useful moments
 - render vertical clips with bold burned-in captions, timed cutaway B-roll, and visual polish
+- generate a 1280x720 viral thumbnail for one-minute and long videos using the selected payoff frame and OpenAI hook
 - generate local movie-recap narration with Piper, with Windows and OpenAI voice fallbacks
 - score titles, descriptions, tags, and pinned questions with a TubeBuddy/vidIQ-style SEO checklist
 - write a posting review queue for YouTube, TikTok, and Instagram
@@ -68,6 +69,8 @@ The dashboard has two generation modes:
 
 - `Viral Shorts` creates several ranked clips, starts close to the reaction payoff, shows a bold hook for the first five seconds, and adds an interaction question near the end.
 - `Long video` creates one horizontal highlight at a requested duration from 1 to 120 minutes.
+
+One-minute and long-video results include a custom YouTube thumbnail beside the rendered video. The Manual Upload dialog provides separate clip and thumbnail downloads. Direct YouTube publishing also attempts to apply the generated thumbnail after upload.
 
 Use `Settings` to store TranscriptAPI, OpenAI, YouTube, TikTok, and Instagram credentials locally. Credentials are written under the ignored `.secrets` directory and are never returned to browser JavaScript.
 
