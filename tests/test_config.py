@@ -34,6 +34,8 @@ def test_local_settings_only_persist_allowed_values(tmp_path) -> None:
         {
             "TRANSCRIPT_API_KEY": "test-key",
             "OPENAI_API_KEY": "openai-key",
+            "ELEVENLABS_API_KEY": "eleven-key",
+            "ELEVENLABS_VOICE_ID": "voice-id",
             "NOT_ALLOWED": "ignored",
         },
         path,
@@ -41,4 +43,6 @@ def test_local_settings_only_persist_allowed_values(tmp_path) -> None:
     assert load_local_settings(path) == {
         "TRANSCRIPT_API_KEY": "test-key",
         "OPENAI_API_KEY": "openai-key",
+        "ELEVENLABS_API_KEY": "eleven-key",
+        "ELEVENLABS_VOICE_ID": "voice-id",
     }

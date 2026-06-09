@@ -15,12 +15,10 @@ ARCHIVE_SEARCH_URL = "https://archive.org/advancedsearch.php"
 ARCHIVE_METADATA_URL = "https://archive.org/metadata"
 ARCHIVE_DOWNLOAD_URL = "https://archive.org/download"
 OPEN_LICENSE_QUERY = (
-    "mediatype:movies AND "
-    "(licenseurl:*publicdomain* OR licenseurl:*creativecommons.org/licenses/by/* "
-    "OR licenseurl:*creativecommons.org/licenses/by-sa/*) "
-    'AND (format:"h.264" OR format:"512Kb MPEG4")'
+    "mediatype:movies AND licenseurl:*publicdomain*"
 )
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._-]{1,160}$")
+EXCLUDED_CATALOG_IDENTIFIERS = {"sex_madness"}
 
 
 class PublicMovieError(RuntimeError):
@@ -71,6 +69,25 @@ def archive_download_url(identifier: str, filename: str) -> str:
 
 
 FEATURED_OPEN_MOVIES = (
+    {
+        "identifier": "wing_it",
+        "title": "Wing It!",
+        "description": (
+            "A colorful 2023 Blender Studio space comedy about an engineer, "
+            "an enthusiastic pilot, and an out-of-control shuttle."
+        ),
+        "year": "2023",
+        "downloads": 0,
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "thumbnail_url": (
+            "https://studio.blender.org/files/public/thumbnail/c2/6d/"
+            "c26d3b56aeb6bc9bf1ba6ee8e27b7ccd_m.webp"
+        ),
+        "details_url": archive_details_url("wing_it"),
+        "official_url": "https://studio.blender.org/projects/wing-it/",
+        "provider": "Blender Studio / Internet Archive",
+        "featured": True,
+    },
     {
         "identifier": "charge-blender-open-movie-1608p",
         "title": "Charge: Blender Open Movie",
@@ -129,45 +146,64 @@ FEATURED_BY_IDENTIFIER = {
 def search_public_domain_movies(
     query: str = "",
     page: int = 1,
-    rows: int = 12,
+    rows: int = 18,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> dict[str, Any]:
     terms = safe_search_terms(query)
-    if not terms:
-        return {
-            "query": "",
-            "page": 1,
-            "total": len(FEATURED_OPEN_MOVIES),
-            "movies": [dict(movie) for movie in FEATURED_OPEN_MOVIES],
-            "featured": True,
-        }
-    search_query = f"{OPEN_LICENSE_QUERY} AND (title:({terms}) OR description:({terms}))"
-    response = requests.get(
-        ARCHIVE_SEARCH_URL,
-        params={
-            "q": search_query,
-            "fl[]": [
-                "identifier",
-                "title",
-                "description",
-                "year",
-                "downloads",
-                "licenseurl",
-            ],
-            "sort[]": "downloads desc",
-            "rows": max(1, min(24, int(rows))),
-            "page": max(1, int(page)),
-            "output": "json",
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    payload = response.json().get("response") or {}
+    current_year = 2026
+    start_year = max(1880, min(current_year, int(year_from or 1880)))
+    end_year = max(start_year, min(current_year, int(year_to or current_year)))
+    clauses = [OPEN_LICENSE_QUERY, f"year:[{start_year} TO {end_year}]"]
+    if terms:
+        clauses.append(f"(title:({terms}) OR description:({terms}))")
+    else:
+        clauses.append("collection:feature_films")
+    search_query = " AND ".join(clauses)
+    try:
+        response = requests.get(
+            ARCHIVE_SEARCH_URL,
+            params={
+                "q": search_query,
+                "fl[]": [
+                    "identifier",
+                    "title",
+                    "description",
+                    "year",
+                    "downloads",
+                    "licenseurl",
+                ],
+                "sort[]": "downloads desc",
+                "rows": max(1, min(24, int(rows))),
+                "page": max(1, int(page)),
+                "output": "json",
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json().get("response") or {}
+    except requests.RequestException:
+        payload = {"docs": [], "numFound": 0}
     movies: list[dict[str, Any]] = []
+    featured_movies = [
+        dict(movie)
+        for movie in FEATURED_OPEN_MOVIES
+        if start_year <= int(movie["year"]) <= end_year
+    ]
+    if max(1, int(page)) == 1 and not terms:
+        movies.extend(featured_movies)
+    seen = {movie["identifier"] for movie in movies}
     for document in payload.get("docs") or []:
         identifier = str(document.get("identifier") or "")
         license_url = open_media_license(document.get("licenseurl"))
-        if not IDENTIFIER_RE.fullmatch(identifier) or not license_url:
+        if (
+            not IDENTIFIER_RE.fullmatch(identifier)
+            or not license_url
+            or identifier in seen
+            or identifier in EXCLUDED_CATALOG_IDENTIFIERS
+        ):
             continue
+        seen.add(identifier)
         movies.append(
             {
                 "identifier": identifier,
@@ -185,8 +221,15 @@ def search_public_domain_movies(
     return {
         "query": terms,
         "page": max(1, int(page)),
-        "total": int(payload.get("numFound") or len(movies)),
+        "year_from": start_year,
+        "year_to": end_year,
+        "total": int(payload.get("numFound") or 0) + (
+            len(featured_movies)
+            if max(1, int(page)) == 1 and not terms
+            else 0
+        ),
         "movies": movies,
+        "featured": not terms and max(1, int(page)) == 1,
     }
 
 

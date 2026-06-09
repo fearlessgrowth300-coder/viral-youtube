@@ -13,6 +13,9 @@ LOCAL_SETTINGS_PATH = SECRETS_ROOT / "app_settings.json"
 SETTINGS_PIN_PATH = SECRETS_ROOT / "settings_pin.txt"
 SETTING_NAMES = {
     "OPENAI_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "ELEVENLABS_VOICE_ID",
+    "ELEVENLABS_MODEL_ID",
     "TRANSCRIPT_API_KEY",
     "YOUTUBE_CLIENT_SECRETS",
     "TIKTOK_ACCESS_TOKEN",
@@ -136,6 +139,10 @@ class AgentConfig:
     transcript_api_base_url: str = "https://transcriptapi.com/api/v2"
     piper_model_path: Path | None = None
     piper_speaker_id: int = 0
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_output_format: str = "mp3_44100_128"
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
@@ -200,4 +207,17 @@ class AgentConfig:
             ),
             piper_model_path=Path(piper_model) if piper_model else None,
             piper_speaker_id=int_value("PIPER_SPEAKER_ID", 0),
+            elevenlabs_api_key=value("ELEVENLABS_API_KEY") or None,
+            elevenlabs_voice_id=value(
+                "ELEVENLABS_VOICE_ID",
+                "JBFqnCBsd6RMkjVDRZzb",
+            ),
+            elevenlabs_model_id=value(
+                "ELEVENLABS_MODEL_ID",
+                "eleven_multilingual_v2",
+            ),
+            elevenlabs_output_format=value(
+                "ELEVENLABS_OUTPUT_FORMAT",
+                "mp3_44100_128",
+            ),
         )

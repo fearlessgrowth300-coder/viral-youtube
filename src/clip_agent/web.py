@@ -391,6 +391,9 @@ def settings_status(config: AgentConfig) -> dict[str, Any]:
     return {
         "transcript_api_configured": bool(config.transcript_api_key),
         "openai_configured": bool(config.openai_api_key),
+        "elevenlabs_configured": bool(config.elevenlabs_api_key),
+        "elevenlabs_voice_id": config.elevenlabs_voice_id,
+        "elevenlabs_model_id": config.elevenlabs_model_id,
         "youtube_client_secrets_configured": bool(config.youtube_client_secrets),
         "youtube_client_secrets": str(config.youtube_client_secrets or ""),
         "tiktok_configured": bool(config.tiktok_access_token),
@@ -408,6 +411,9 @@ def update_app_settings(payload: dict[str, Any], state: WebState, supplied_pin: 
     field_map = {
         "transcript_api_key": "TRANSCRIPT_API_KEY",
         "openai_api_key": "OPENAI_API_KEY",
+        "elevenlabs_api_key": "ELEVENLABS_API_KEY",
+        "elevenlabs_voice_id": "ELEVENLABS_VOICE_ID",
+        "elevenlabs_model_id": "ELEVENLABS_MODEL_ID",
         "youtube_client_secrets": "YOUTUBE_CLIENT_SECRETS",
         "tiktok_access_token": "TIKTOK_ACCESS_TOKEN",
         "instagram_access_token": "INSTAGRAM_ACCESS_TOKEN",
@@ -721,7 +727,7 @@ def start_run_job(payload: dict[str, Any], state: WebState) -> dict[str, Any]:
         seo_optimize=True
         if payload.get("seo_optimize") is None
         else safe_bool(payload.get("seo_optimize")),
-        voice_provider=str(payload.get("voice_provider") or "local-piper"),
+        voice_provider=str(payload.get("voice_provider") or "elevenlabs"),
         narration_style=str(payload.get("narration_style") or "movie-recap"),
     )
 
@@ -873,18 +879,13 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                 write_file(self, target, send_body=send_body)
             elif path == "/api/status":
                 runs = list_runs()
-                piper_model = self.app_state.config.piper_model_path
-                if piper_model and not piper_model.is_absolute():
-                    piper_model = PROJECT_ROOT / piper_model
                 write_json(
                     self,
                     {
                         "project_root": str(PROJECT_ROOT),
                         "openai_configured": bool(self.app_state.config.openai_api_key),
-                        "local_voice_ready": bool(
-                            piper_model
-                            and piper_model.exists()
-                            and piper_model.with_suffix(piper_model.suffix + ".json").exists()
+                        "elevenlabs_configured": bool(
+                            self.app_state.config.elevenlabs_api_key
                         ),
                         "transcript_api_configured": bool(self.app_state.config.transcript_api_key),
                         "youtube_download_allowed": self.app_state.config.allow_youtube_download,
@@ -921,6 +922,18 @@ class ClipperRequestHandler(BaseHTTPRequestHandler):
                     search_public_domain_movies(
                         params.get("query", [""])[0],
                         safe_int(params.get("page", ["1"])[0], 1, 1, 100),
+                        year_from=safe_int(
+                            params.get("year_from", ["1880"])[0],
+                            1880,
+                            1880,
+                            2026,
+                        ),
+                        year_to=safe_int(
+                            params.get("year_to", ["2026"])[0],
+                            2026,
+                            1880,
+                            2026,
+                        ),
                     ),
                 )
             elif path == "/api/public-movies/resolve":

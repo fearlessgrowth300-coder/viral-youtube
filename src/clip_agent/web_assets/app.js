@@ -2,7 +2,8 @@ const state = {
   pollingTimer: null,
   lastRuns: [],
   runsSignature: "",
-  submittingRun: false
+  submittingRun: false,
+  elevenlabsConfigured: false
 };
 
 const statusRow = document.querySelector("#statusRow");
@@ -56,6 +57,9 @@ const settingsStatus = document.querySelector("#settingsStatus");
 const settingsPinInput = document.querySelector("#settingsPinInput");
 const transcriptApiKeyInput = document.querySelector("#transcriptApiKeyInput");
 const openaiApiKeyInput = document.querySelector("#openaiApiKeyInput");
+const elevenlabsApiKeyInput = document.querySelector("#elevenlabsApiKeyInput");
+const elevenlabsVoiceIdInput = document.querySelector("#elevenlabsVoiceIdInput");
+const elevenlabsModelInput = document.querySelector("#elevenlabsModelInput");
 const youtubeSecretsInput = document.querySelector("#youtubeSecretsInput");
 const tiktokTokenInput = document.querySelector("#tiktokTokenInput");
 const instagramTokenInput = document.querySelector("#instagramTokenInput");
@@ -72,6 +76,7 @@ const movieLibraryModal = document.querySelector("#movieLibraryModal");
 const movieLibraryClose = document.querySelector("#movieLibraryClose");
 const movieSearchForm = document.querySelector("#movieSearchForm");
 const movieSearchInput = document.querySelector("#movieSearchInput");
+const movieDateFilter = document.querySelector("#movieDateFilter");
 const movieLibraryStatus = document.querySelector("#movieLibraryStatus");
 const movieGrid = document.querySelector("#movieGrid");
 const selectedMovie = document.querySelector("#selectedMovie");
@@ -186,11 +191,17 @@ function renderMovieLibrary(movies) {
 }
 
 async function searchPublicMovies() {
+  const [yearFrom, yearTo] = movieDateFilter.value.split("-");
   movieLibraryStatus.textContent = movieSearchInput.value.trim()
     ? "Searching open movies..."
-    : "Loading featured modern open movies...";
+    : "Loading open movies...";
   movieGrid.replaceChildren();
-  const payload = await api(`/api/public-movies?query=${encodeURIComponent(movieSearchInput.value.trim())}`);
+  const params = new URLSearchParams({
+    query: movieSearchInput.value.trim(),
+    year_from: yearFrom,
+    year_to: yearTo
+  });
+  const payload = await api(`/api/public-movies?${params.toString()}`);
   renderMovieLibrary(payload.movies || []);
 }
 
@@ -518,9 +529,13 @@ async function analyzeSource(sourceValue, requestId) {
 }
 
 function renderStatus(status) {
+  state.elevenlabsConfigured = Boolean(status.elevenlabs_configured);
   statusRow.replaceChildren(
     pill(status.openai_configured ? "OpenAI ready" : "OpenAI off", status.openai_configured ? "ok" : "warn"),
-    pill(status.local_voice_ready ? "Local voice ready" : "Local voice fallback", status.local_voice_ready ? "ok" : "warn"),
+    pill(
+      status.elevenlabs_configured ? "ElevenLabs ready" : "ElevenLabs off",
+      status.elevenlabs_configured ? "ok" : "warn"
+    ),
     pill(
       status.transcript_api_configured ? "TranscriptAPI ready" : "TranscriptAPI off",
       status.transcript_api_configured ? "ok" : "warn"
@@ -748,6 +763,16 @@ async function startRun(useSample = false) {
   try {
     const sourceValue = document.querySelector("#sourceInput").value.trim();
     const youtubeAllowInput = document.querySelector("#youtubeAllowInput");
+    const voiceoverEnabled = document.querySelector("#voiceoverInput").checked;
+    const voiceProvider = document.querySelector("#voiceProviderInput").value;
+    if (
+      voiceoverEnabled
+      && voiceProvider === "elevenlabs"
+      && !state.elevenlabsConfigured
+    ) {
+      window.alert("Add your ElevenLabs API key in Settings before using ElevenLabs voiceover.");
+      return;
+    }
     if (!useSample && isYouTubeSource(sourceValue) && !youtubeAllowInput.checked) {
       const confirmed = window.confirm(
         "Only continue if you own this YouTube video/live stream or have permission to clip it. Continue?"
@@ -773,8 +798,8 @@ async function startRun(useSample = false) {
       caption_style: selectedCaptionStyle(),
       auto_hook: document.querySelector("#autoHookInput").checked,
       interaction_prompt: document.querySelector("#interactionInput").checked,
-      voiceover: document.querySelector("#voiceoverInput").checked,
-      voice_provider: document.querySelector("#voiceProviderInput").value,
+      voiceover: voiceoverEnabled,
+      voice_provider: voiceProvider,
       narration_style: document.querySelector("#narrationStyleInput").value,
       enable_broll: document.querySelector("#brollInput").checked,
       polish: document.querySelector("#polishInput").checked,
@@ -863,10 +888,13 @@ function renderSettingsStatus(settings) {
   settingsStatus.replaceChildren(
     settingsPill("TranscriptAPI", settings.transcript_api_configured),
     settingsPill("OpenAI", settings.openai_configured),
+    settingsPill("ElevenLabs", settings.elevenlabs_configured),
     settingsPill("YouTube", settings.youtube_client_secrets_configured),
     settingsPill("TikTok", settings.tiktok_configured),
     settingsPill("Instagram", settings.instagram_configured)
   );
+  elevenlabsVoiceIdInput.value = settings.elevenlabs_voice_id || "";
+  elevenlabsModelInput.value = settings.elevenlabs_model_id || "eleven_multilingual_v2";
   youtubeSecretsInput.value = settings.youtube_client_secrets || "";
   instagramUserInput.value = settings.instagram_user_id || "";
   publicMediaUrlInput.value = settings.public_media_base_url || "";
@@ -892,6 +920,9 @@ async function saveSettings() {
       body: JSON.stringify({
         transcript_api_key: transcriptApiKeyInput.value.trim(),
         openai_api_key: openaiApiKeyInput.value.trim(),
+        elevenlabs_api_key: elevenlabsApiKeyInput.value.trim(),
+        elevenlabs_voice_id: elevenlabsVoiceIdInput.value.trim(),
+        elevenlabs_model_id: elevenlabsModelInput.value,
         youtube_client_secrets: youtubeSecretsInput.value.trim(),
         tiktok_access_token: tiktokTokenInput.value.trim(),
         instagram_access_token: instagramTokenInput.value.trim(),
@@ -903,6 +934,7 @@ async function saveSettings() {
     renderSettingsStatus(payload.settings);
     transcriptApiKeyInput.value = "";
     openaiApiKeyInput.value = "";
+    elevenlabsApiKeyInput.value = "";
     tiktokTokenInput.value = "";
     instagramTokenInput.value = "";
     window.alert(payload.message);

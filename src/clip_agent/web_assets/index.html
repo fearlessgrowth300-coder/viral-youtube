@@ -196,9 +196,9 @@
             <label>
               <span>Voice engine</span>
               <select id="voiceProviderInput">
-                <option value="local-piper" selected>Local neural (Piper)</option>
-                <option value="windows">Windows offline</option>
+                <option value="elevenlabs" selected>ElevenLabs</option>
                 <option value="openai">OpenAI voice</option>
+                <option value="windows">Windows offline fallback</option>
               </select>
             </label>
             <label>
@@ -474,6 +474,15 @@
             <span>Search movies</span>
             <input id="movieSearchInput" placeholder="Action, animation, comedy...">
           </label>
+          <label>
+            <span>Date</span>
+            <select id="movieDateFilter">
+              <option value="1880-2026" selected>All dates</option>
+              <option value="2020-2026">2020 to now</option>
+              <option value="2000-2019">2000-2019</option>
+              <option value="1880-1999">Classics before 2000</option>
+            </select>
+          </label>
           <button class="primary" type="submit">Search</button>
         </form>
         <p class="movie-library-note">
@@ -511,6 +520,22 @@
             <input id="openaiApiKeyInput" type="password" autocomplete="off" placeholder="Leave blank to keep current key">
           </label>
           <label>
+            <span>ElevenLabs API key</span>
+            <input id="elevenlabsApiKeyInput" type="password" autocomplete="off" placeholder="Leave blank to keep current key">
+          </label>
+          <label>
+            <span>ElevenLabs voice ID</span>
+            <input id="elevenlabsVoiceIdInput" autocomplete="off" placeholder="Voice ID from ElevenLabs">
+          </label>
+          <label>
+            <span>ElevenLabs model</span>
+            <select id="elevenlabsModelInput">
+              <option value="eleven_multilingual_v2">Multilingual v2</option>
+              <option value="eleven_flash_v2_5">Flash v2.5</option>
+              <option value="eleven_turbo_v2_5">Turbo v2.5</option>
+            </select>
+          </label>
+          <label>
             <span>YouTube OAuth client JSON path</span>
             <input id="youtubeSecretsInput" placeholder="C:\path\client_secret.json">
           </label>
@@ -540,10 +565,11 @@
         <div class="manual-actions">
           <button class="primary" type="button" id="saveSettingsButton">Save settings</button>
           <a class="secondary" href="https://transcriptapi.com/dashboard" target="_blank" rel="noreferrer">TranscriptAPI dashboard</a>
+          <a class="secondary" href="https://elevenlabs.io/app/voice-library" target="_blank" rel="noreferrer">ElevenLabs voices</a>
         </div>
       </section>
     </div>
 
-    <script src="/assets/app.js?v=11" defer></script>
+    <script src="/assets/app.js?v=12" defer></script>
   </body>
 </html>

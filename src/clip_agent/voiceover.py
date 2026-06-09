@@ -6,6 +6,8 @@ import subprocess
 import wave
 from typing import Any
 
+import requests
+
 from .config import AgentConfig
 from .models import ClipCandidate
 from .paths import PROJECT_ROOT
@@ -22,7 +24,7 @@ def generate_voiceover(
     candidate: ClipCandidate,
     destination: Path,
     config: AgentConfig,
-    provider: str = "local-piper",
+    provider: str = "elevenlabs",
     narration_style: str = "movie-recap",
 ) -> Path | None:
     generated, _ = generate_voiceover_with_provider(
@@ -39,14 +41,23 @@ def generate_voiceover_with_provider(
     candidate: ClipCandidate,
     destination: Path,
     config: AgentConfig,
-    provider: str = "local-piper",
+    provider: str = "elevenlabs",
     narration_style: str = "movie-recap",
 ) -> tuple[Path | None, str]:
     text = narration_text(candidate)
     if not text:
         return None, ""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    provider = str(provider or "local-piper").strip().lower()
+    provider = str(provider or "elevenlabs").strip().lower()
+
+    if provider in {"elevenlabs", "eleven-labs"}:
+        generated = generate_elevenlabs_voiceover(
+            text,
+            destination,
+            config,
+            narration_style,
+        )
+        return generated, "ElevenLabs voice" if generated else ""
 
     if provider in {"local-piper", "piper"}:
         generated = generate_piper_voiceover(
@@ -149,6 +160,70 @@ def generate_openai_voiceover(
         return destination
     except Exception:
         return None
+
+
+def elevenlabs_voice_settings(narration_style: str) -> dict[str, object]:
+    if narration_style == "energetic":
+        return {
+            "stability": 0.35,
+            "similarity_boost": 0.78,
+            "style": 0.55,
+            "use_speaker_boost": True,
+        }
+    if narration_style == "natural":
+        return {
+            "stability": 0.58,
+            "similarity_boost": 0.75,
+            "style": 0.12,
+            "use_speaker_boost": True,
+        }
+    return {
+        "stability": 0.48,
+        "similarity_boost": 0.82,
+        "style": 0.38,
+        "use_speaker_boost": True,
+    }
+
+
+def generate_elevenlabs_voiceover(
+    text: str,
+    destination: Path,
+    config: AgentConfig,
+    narration_style: str,
+) -> Path | None:
+    if not config.elevenlabs_api_key or not config.elevenlabs_voice_id:
+        return None
+    url = (
+        "https://api.elevenlabs.io/v1/text-to-speech/"
+        f"{config.elevenlabs_voice_id}"
+    )
+    try:
+        with requests.post(
+            url,
+            headers={
+                "xi-api-key": config.elevenlabs_api_key,
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+            },
+            params={"output_format": config.elevenlabs_output_format},
+            json={
+                "text": text[:900],
+                "model_id": config.elevenlabs_model_id,
+                "voice_settings": elevenlabs_voice_settings(narration_style),
+            },
+            stream=True,
+            timeout=(15, 120),
+        ) as response:
+            response.raise_for_status()
+            with destination.open("wb") as output:
+                for chunk in response.iter_content(chunk_size=64 * 1024):
+                    if chunk:
+                        output.write(chunk)
+        if destination.exists() and destination.stat().st_size > 1024:
+            return destination
+    except (OSError, requests.RequestException):
+        destination.unlink(missing_ok=True)
+    return None
 
 
 def resolve_piper_model(config: AgentConfig) -> Path | None:

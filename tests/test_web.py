@@ -73,6 +73,15 @@ def test_web_assets_include_opencut_handoff() -> None:
     assert "selectedOpenCutClip.srt_url" in javascript
 
 
+def test_web_assets_default_to_elevenlabs_and_include_movie_dates() -> None:
+    html = (ASSETS_DIR / "index.html").read_text(encoding="utf-8")
+    javascript = (ASSETS_DIR / "app.js").read_text(encoding="utf-8")
+    assert '<option value="elevenlabs" selected>ElevenLabs</option>' in html
+    assert 'id="elevenlabsApiKeyInput"' in html
+    assert 'id="movieDateFilter"' in html
+    assert "ElevenLabs ready" in javascript
+
+
 def minimal_config() -> AgentConfig:
     return AgentConfig(
         openai_api_key=None,

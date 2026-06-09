@@ -10,7 +10,7 @@ This is a local starter agent for clipping videos you own or have permission to 
 - render vertical clips with bold burned-in captions, timed cutaway B-roll, and visual polish
 - generate a 1280x720 viral thumbnail for one-minute and long videos using the selected payoff frame and OpenAI hook
 - browse Internet Archive movies explicitly marked public domain and use their MP4/subtitle files as clip sources
-- generate local movie-recap narration with Piper, with Windows and OpenAI voice fallbacks
+- generate movie-recap narration and clip voiceovers with ElevenLabs
 - hand rendered clips and timed captions to the MIT-licensed OpenCut editor for trimming, effects, audio, text, and final edits
 - score titles, descriptions, tags, and pinned questions with a TubeBuddy/vidIQ-style SEO checklist
 - write a posting review queue for YouTube, TikTok, and Instagram
@@ -25,10 +25,9 @@ cd C:\Users\UPCOMING\ai-video-clipper-agent
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e ".[ai,local-voice,publish,dev]"
 Copy-Item .env.example .env
-.\.venv\Scripts\python -m piper.download_voices en_US-libritts-high --download-dir .tools\piper-voices
 ```
 
-Edit `.env` with your keys. The packaged `imageio-ffmpeg` binary is used automatically if system `ffmpeg` is not installed.
+Edit `.env` with your OpenAI, TranscriptAPI, and ElevenLabs keys. The packaged `imageio-ffmpeg` binary is used automatically if system `ffmpeg` is not installed.
 
 ## Process One Video
 
@@ -61,7 +60,7 @@ Open:
 http://127.0.0.1:8010
 ```
 
-The dashboard can start clip runs, show active jobs, preview rendered clips, and send reviewed queue entries to the configured publisher adapters. New runs default to bold captions, source-derived cutaway B-roll, polish filters, SEO scoring, and local Piper narration.
+The dashboard can start clip runs, show active jobs, preview rendered clips, and send reviewed queue entries to the configured publisher adapters. New runs default to bold captions, source-derived cutaway B-roll, polish filters, SEO scoring, and ElevenLabs narration.
 
 The SEO score is an in-app optimizer based on common title, keyword, description, tag, and engagement checks. It is not a direct TubeBuddy or vidIQ API integration.
 
@@ -76,13 +75,13 @@ One-minute and long-video results include a custom YouTube thumbnail beside the 
 
 Each rendered clip also has an `Edit in OpenCut` action. It downloads the MP4 and generated SRT, then opens the official [OpenCut](https://github.com/OpenCut-app/OpenCut) web editor. OpenCut does not currently expose a stable editor import API, so the downloaded video is imported from its Assets panel and the SRT from its Captions panel.
 
-Use `Settings` to store TranscriptAPI, OpenAI, YouTube, TikTok, and Instagram credentials locally. Credentials are written under the ignored `.secrets` directory and are never returned to browser JavaScript.
+Use `Settings` to store TranscriptAPI, OpenAI, ElevenLabs, YouTube, TikTok, and Instagram credentials locally. Credentials are written under the ignored `.secrets` directory and are never returned to browser JavaScript. ElevenLabs also accepts a voice ID and model choice for both short voiceovers and movie recaps.
 
 When configured, TranscriptAPI is used as a YouTube transcript fallback before audio transcription. Exhausted credits, invalid keys, and rate limits are shown as clear job errors so the key can be replaced in Settings.
 
 Pasting a YouTube link starts transcript analysis before rendering. The dashboard shows the top ranked timestamps, hooks, titles, descriptions, and tags. That transcript and OpenAI analysis are cached under the ignored `.cache` directory and reused when the clipping job starts.
 
-Use `Browse public-domain movies` to search Internet Archive's public-domain feature-film catalog. Selecting a title fills the direct MP4 source and downloads an available `.srt` or `.vtt` subtitle into the local cache for transcript-based viral moment selection. Always review the linked Archive.org item page and rights record before publishing.
+Use `Browse modern open movies` to search open-licensed Internet Archive videos. The date filter can show recent releases, 2000-2019 titles, or classic films before 2000. Selecting a title fills the direct MP4 source and downloads an available `.srt` or `.vtt` subtitle into the local cache for transcript-based viral moment selection. Always review the linked Archive.org item page and rights record before publishing.
 
 ## Production Website
 
@@ -90,7 +89,7 @@ The repository includes a production Docker image and `render.yaml` blueprint. T
 
 - uses the provider's permanent HTTPS URL
 - stores runs, transcript caches, and saved settings on `/data`
-- includes FFmpeg and the local Piper narration model
+- includes FFmpeg for clipping and rendering
 - exposes `/healthz` for hosting health checks
 - protects the entire site with `APP_USERNAME` and `APP_PASSWORD`
 
@@ -175,5 +174,6 @@ You still need official platform app setup:
 
 - Use `--transcript path\to\captions.srt` if you already have captions. This gives better moment selection and captions.
 - Background audio should be music or sound you own or have licensed.
-- Piper uses the GPL-3.0-or-later engine and the `en_US-libritts-high` LibriTTS voice data under CC BY 4.0. Attribution is written to clip metadata.
+- ElevenLabs usage is charged against the ElevenLabs account connected in Settings.
+- Piper and Windows speech remain backend fallbacks for existing configurations, but ElevenLabs is the default voice engine.
 - If you enable generated voiceover, your post metadata includes a disclosure note.

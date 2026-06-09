@@ -54,11 +54,39 @@ def test_search_public_domain_movies_filters_license(monkeypatch) -> None:
     assert [movie["identifier"] for movie in result["movies"]] == ["his_girl_friday"]
 
 
-def test_empty_movie_search_returns_modern_featured_films() -> None:
+def test_empty_movie_search_returns_modern_and_catalog_films(monkeypatch) -> None:
+    payload = {
+        "response": {
+            "numFound": 1,
+            "docs": [
+                {
+                    "identifier": "classic_movie",
+                    "title": "Classic Movie",
+                    "year": 1940,
+                    "downloads": 500,
+                    "licenseurl": "http://creativecommons.org/publicdomain/mark/1.0/",
+                }
+            ],
+        }
+    }
+    monkeypatch.setattr(
+        "clip_agent.public_movies.requests.get",
+        lambda *args, **kwargs: FakeResponse(payload),
+    )
     result = search_public_domain_movies("")
     assert result["featured"] is True
-    assert result["movies"][0]["year"] == "2022"
-    assert result["movies"][0]["identifier"] == "charge-blender-open-movie-1608p"
+    assert result["movies"][0]["year"] == "2023"
+    assert result["movies"][0]["identifier"] == "wing_it"
+    assert result["movies"][-1]["identifier"] == "classic_movie"
+
+
+def test_movie_search_filters_featured_by_date(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clip_agent.public_movies.requests.get",
+        lambda *args, **kwargs: FakeResponse({"response": {"docs": [], "numFound": 0}}),
+    )
+    result = search_public_domain_movies("", year_from=2023, year_to=2026)
+    assert [movie["identifier"] for movie in result["movies"]] == ["wing_it"]
 
 
 def test_choose_movie_file_prefers_higher_quality() -> None:

@@ -52,7 +52,7 @@ class RunOptions:
     enable_broll: bool = True
     polish: bool = True
     seo_optimize: bool = True
-    voice_provider: str = "local-piper"
+    voice_provider: str = "elevenlabs"
     narration_style: str = "movie-recap"
 
 
