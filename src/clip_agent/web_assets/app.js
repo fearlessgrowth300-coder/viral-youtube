@@ -42,6 +42,14 @@ const manualUploadDownload = document.querySelector("#manualUploadDownload");
 const manualThumbnailField = document.querySelector("#manualThumbnailField");
 const manualUploadThumbnail = document.querySelector("#manualUploadThumbnail");
 const manualUploadThumbnailDownload = document.querySelector("#manualUploadThumbnailDownload");
+const openCutModal = document.querySelector("#openCutModal");
+const openCutClose = document.querySelector("#openCutClose");
+const openCutPreview = document.querySelector("#openCutPreview");
+const openCutClipTitle = document.querySelector("#openCutClipTitle");
+const openCutAssetStatus = document.querySelector("#openCutAssetStatus");
+const openCutClipDownload = document.querySelector("#openCutClipDownload");
+const openCutCaptionDownload = document.querySelector("#openCutCaptionDownload");
+const openCutLaunch = document.querySelector("#openCutLaunch");
 const settingsModal = document.querySelector("#settingsModal");
 const settingsClose = document.querySelector("#settingsClose");
 const settingsStatus = document.querySelector("#settingsStatus");
@@ -75,6 +83,8 @@ let analyzeTimer = null;
 let sourceAnalysisRequestId = 0;
 let lastCredentialAlert = "";
 let deferredInstallPrompt = null;
+let selectedOpenCutClip = null;
+const OPEN_CUT_PROJECTS_URL = "https://opencut.app/projects";
 
 function pill(text, tone = "") {
   const span = document.createElement("span");
@@ -682,6 +692,9 @@ function renderRuns(runs) {
         enhancementLabels.join(" | ")
       ].filter(Boolean).join("\n");
       clipNode
+        .querySelector('[data-action="edit-opencut"]')
+        .addEventListener("click", () => openOpenCutHandoff(clip));
+      clipNode
         .querySelector('[data-action="manual-upload"]')
         .addEventListener("click", () => openManualUpload(clip));
       clipNode
@@ -926,6 +939,77 @@ function closeManualUpload() {
   manualUploadModal.hidden = true;
 }
 
+function downloadName(title, suffix) {
+  const stem = cleanDisplayText(title || "clip")
+    .replace(/[^a-zA-Z0-9 _-]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80) || "clip";
+  return `${stem}${suffix}`;
+}
+
+function triggerAssetDownload(url, filename) {
+  if (!url) {
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+function openOpenCutHandoff(clip) {
+  selectedOpenCutClip = clip;
+  openCutClipTitle.textContent = cleanDisplayText(clip.title || "Generated clip");
+  openCutPreview.src = clip.video_url;
+  openCutClipDownload.href = clip.video_url;
+  openCutClipDownload.download = downloadName(clip.title, ".mp4");
+  if (clip.srt_url) {
+    openCutCaptionDownload.href = clip.srt_url;
+    openCutCaptionDownload.download = downloadName(clip.title, ".srt");
+    openCutCaptionDownload.hidden = false;
+    openCutAssetStatus.textContent = "Video and timed captions ready for OpenCut.";
+  } else {
+    openCutCaptionDownload.removeAttribute("href");
+    openCutCaptionDownload.hidden = true;
+    openCutAssetStatus.textContent = "Video ready. Captions can be created inside OpenCut.";
+  }
+  openCutModal.hidden = false;
+}
+
+function closeOpenCutHandoff() {
+  openCutModal.hidden = true;
+  openCutPreview.pause();
+  openCutPreview.removeAttribute("src");
+  openCutPreview.load();
+  selectedOpenCutClip = null;
+}
+
+function launchOpenCutWithAssets() {
+  if (!selectedOpenCutClip) {
+    return;
+  }
+  window.open(OPEN_CUT_PROJECTS_URL, "_blank", "noopener,noreferrer");
+  triggerAssetDownload(
+    selectedOpenCutClip.video_url,
+    downloadName(selectedOpenCutClip.title, ".mp4")
+  );
+  if (selectedOpenCutClip.srt_url) {
+    window.setTimeout(() => {
+      triggerAssetDownload(
+        selectedOpenCutClip.srt_url,
+        downloadName(selectedOpenCutClip.title, ".srt")
+      );
+    }, 350);
+  }
+  openCutAssetStatus.textContent = selectedOpenCutClip.srt_url
+    ? "Video and captions downloaded. Import them in the OpenCut tab."
+    : "Video downloaded. Import it in the OpenCut tab.";
+}
+
 runForm.addEventListener("submit", (event) => {
   event.preventDefault();
   startRun(false).catch((error) => window.alert(error.message));
@@ -978,6 +1062,13 @@ manualUploadModal.addEventListener("click", (event) => {
     closeManualUpload();
   }
 });
+openCutClose.addEventListener("click", closeOpenCutHandoff);
+openCutLaunch.addEventListener("click", launchOpenCutWithAssets);
+openCutModal.addEventListener("click", (event) => {
+  if (event.target === openCutModal) {
+    closeOpenCutHandoff();
+  }
+});
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !manualUploadModal.hidden) {
     closeManualUpload();
@@ -987,6 +1078,9 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && !movieLibraryModal.hidden) {
     closeMovieLibrary();
+  }
+  if (event.key === "Escape" && !openCutModal.hidden) {
+    closeOpenCutHandoff();
   }
 });
 document.querySelectorAll("[data-copy-target]").forEach((button) => {

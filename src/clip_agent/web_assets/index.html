@@ -354,12 +354,47 @@
             <a target="_blank" rel="noreferrer" data-field="download">Download</a>
             <a target="_blank" rel="noreferrer" data-field="metadata">Metadata</a>
             <a target="_blank" rel="noreferrer" data-field="thumbnail-download" download hidden>Thumbnail</a>
+            <button class="primary compact" type="button" data-action="edit-opencut">Edit in OpenCut</button>
             <button class="secondary compact" type="button" data-action="manual-upload">Manual upload</button>
             <button class="text-danger" type="button" data-action="delete-clip">Delete clip</button>
           </div>
         </div>
       </article>
     </template>
+
+    <div class="modal-backdrop" id="openCutModal" hidden>
+      <section class="opencut-modal" role="dialog" aria-modal="true" aria-labelledby="openCutTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Open-source video editor</p>
+            <h2 id="openCutTitle">Finish in OpenCut</h2>
+          </div>
+          <button class="icon-button" type="button" id="openCutClose" aria-label="Close">X</button>
+        </div>
+
+        <div class="opencut-asset">
+          <video id="openCutPreview" controls muted playsinline preload="metadata"></video>
+          <div>
+            <strong id="openCutClipTitle"></strong>
+            <p id="openCutAssetStatus">Clip and captions are ready.</p>
+          </div>
+        </div>
+
+        <div class="opencut-actions">
+          <a class="secondary" id="openCutClipDownload" download>Download clip</a>
+          <a class="secondary" id="openCutCaptionDownload" download>Download captions</a>
+          <button class="primary" type="button" id="openCutLaunch">Download assets + open OpenCut</button>
+          <a class="secondary" href="https://opencut.app/projects" target="_blank" rel="noreferrer">Open OpenCut only</a>
+        </div>
+
+        <p class="opencut-note">
+          OpenCut currently imports local files. Add the downloaded video from Assets and the SRT from Captions.
+        </p>
+        <a class="opencut-source" href="https://github.com/OpenCut-app/OpenCut" target="_blank" rel="noreferrer">
+          OpenCut source and MIT license
+        </a>
+      </section>
+    </div>
 
     <div class="modal-backdrop" id="manualUploadModal" hidden>
       <section class="manual-upload-modal" role="dialog" aria-modal="true" aria-labelledby="manualUploadTitle">
@@ -509,6 +544,6 @@
       </section>
     </div>
 
-    <script src="/assets/app.js?v=10" defer></script>
+    <script src="/assets/app.js?v=11" defer></script>
   </body>
 </html>

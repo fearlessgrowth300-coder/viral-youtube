@@ -11,6 +11,7 @@ This is a local starter agent for clipping videos you own or have permission to 
 - generate a 1280x720 viral thumbnail for one-minute and long videos using the selected payoff frame and OpenAI hook
 - browse Internet Archive movies explicitly marked public domain and use their MP4/subtitle files as clip sources
 - generate local movie-recap narration with Piper, with Windows and OpenAI voice fallbacks
+- hand rendered clips and timed captions to the MIT-licensed OpenCut editor for trimming, effects, audio, text, and final edits
 - score titles, descriptions, tags, and pinned questions with a TubeBuddy/vidIQ-style SEO checklist
 - write a posting review queue for YouTube, TikTok, and Instagram
 - keep working by watching a folder of incoming recordings
@@ -72,6 +73,8 @@ The dashboard has two generation modes:
 - `Long video` creates one horizontal highlight at a requested duration from 1 to 120 minutes.
 
 One-minute and long-video results include a custom YouTube thumbnail beside the rendered video. The Manual Upload dialog provides separate clip and thumbnail downloads. Direct YouTube publishing also attempts to apply the generated thumbnail after upload.
+
+Each rendered clip also has an `Edit in OpenCut` action. It downloads the MP4 and generated SRT, then opens the official [OpenCut](https://github.com/OpenCut-app/OpenCut) web editor. OpenCut does not currently expose a stable editor import API, so the downloaded video is imported from its Assets panel and the SRT from its Captions panel.
 
 Use `Settings` to store TranscriptAPI, OpenAI, YouTube, TikTok, and Instagram credentials locally. Credentials are written under the ignored `.secrets` directory and are never returned to browser JavaScript.
 

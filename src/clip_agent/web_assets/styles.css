@@ -902,7 +902,8 @@ legend {
 
 .manual-upload-modal,
 .settings-modal,
-.movie-library-modal {
+.movie-library-modal,
+.opencut-modal {
   width: min(760px, 100%);
   max-height: min(760px, calc(100vh - 36px));
   overflow: auto;
@@ -911,6 +912,50 @@ legend {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 24px 70px rgba(16, 20, 18, 0.28);
+}
+
+.opencut-modal {
+  width: min(760px, 100%);
+}
+
+.opencut-asset {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.opencut-asset video {
+  width: 180px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #111;
+}
+
+.opencut-asset p,
+.opencut-note {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.opencut-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.opencut-source {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 13px;
 }
 
 .movie-library-modal {
@@ -1100,7 +1145,8 @@ textarea {
   }
 
   .movie-search,
-  .movie-card {
+  .movie-card,
+  .opencut-asset {
     grid-template-columns: 1fr;
   }
 
@@ -1109,6 +1155,10 @@ textarea {
     height: auto;
     min-height: 0;
     aspect-ratio: 16 / 9;
+  }
+
+  .opencut-asset video {
+    width: 100%;
   }
 
   .workspace {

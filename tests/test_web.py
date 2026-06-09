@@ -64,6 +64,15 @@ def test_pwa_assets_exist_with_manifest_content_type() -> None:
     assert content_type_for_path(ASSETS_DIR / "manifest.webmanifest") == "application/manifest+json"
 
 
+def test_web_assets_include_opencut_handoff() -> None:
+    html = (ASSETS_DIR / "index.html").read_text(encoding="utf-8")
+    javascript = (ASSETS_DIR / "app.js").read_text(encoding="utf-8")
+    assert 'data-action="edit-opencut"' in html
+    assert 'id="openCutModal"' in html
+    assert "https://opencut.app/projects" in javascript
+    assert "selectedOpenCutClip.srt_url" in javascript
+
+
 def minimal_config() -> AgentConfig:
     return AgentConfig(
         openai_api_key=None,
